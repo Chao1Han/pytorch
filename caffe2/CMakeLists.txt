@@ -1598,6 +1598,7 @@ if(BUILD_SHARED_LIBS)
   if(CAFFE2_USE_MKL)
     target_link_libraries(torch_global_deps caffe2::mkl)
   endif()
+  target_link_libraries(torch_global_deps ${ONEMKL_LIBRARIES})
   # The CUDA libraries are linked here for a different reason: in some
   # cases we load these libraries with ctypes, and if they weren't opened
   # with RTLD_GLOBAL, we'll do the "normal" search process again (and
