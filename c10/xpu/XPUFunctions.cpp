@@ -113,9 +113,9 @@ inline void check_device(DeviceIndex device) {
   TORCH_CHECK(
       device >= 0 && device < total,
       "device is out of range, device is ",
-      device,
+      static_cast<int16_t>(device),
       ", total number of device is ",
-      total,
+      static_cast<int16_t>(total),
       ".");
 }
 
