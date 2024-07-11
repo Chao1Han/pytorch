@@ -1481,6 +1481,11 @@ endif()
 
 if(USE_XPU)
   target_link_libraries(torch PUBLIC torch_xpu_library)
+  if(LINUX)
+    target_link_options(torch PRIVATE "-Wl,-rpath,$ORIGIN")
+    target_link_options(torch PRIVATE "-Wl,-rpath,$ORIGIN/../../../../")
+    target_link_options(torch PRIVATE "-Wl,--disable-new-dtags")
+  endif()
 endif()
 
 if(PRINT_CMAKE_DEBUG_INFO)
@@ -1527,6 +1532,11 @@ if(USE_XPU)
   target_link_libraries(torch_xpu INTERFACE torch::xpurt)
 
   target_link_libraries(torch_xpu PUBLIC c10_xpu)
+  if(LINUX)
+    target_link_options(torch_xpu PRIVATE "-Wl,-rpath,$ORIGIN")
+    target_link_options(torch_xpu PRIVATE "-Wl,-rpath,$ORIGIN/../../../../")
+    target_link_options(torch_xpu PRIVATE "-Wl,--disable-new-dtags")
+  endif()
 
   target_include_directories(
       torch_xpu INTERFACE $<INSTALL_INTERFACE:include>)
