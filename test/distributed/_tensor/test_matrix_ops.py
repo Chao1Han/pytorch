@@ -5,6 +5,8 @@ import itertools
 from typing import cast, List, Optional
 
 import torch
+import intel_extension_for_pytorch
+import oneccl_bindings_for_pytorch
 import torch.nn.functional as F
 from torch.distributed._tensor import DeviceMesh, distribute_tensor
 from torch.distributed._tensor.api import DTensor
@@ -303,12 +305,12 @@ class DistMatrixOpsTest(DTensorTestBase):
         #       Gaps include missing op support for aten.masked_fill_.Scalar.
         is_causal = True
         enable_gqa = False
-        params = torch.backends.cuda.SDPAParams(
+        params = torch.backends.xpu.SDPAParams(
             query, key, value, None, dropout_p, is_causal, enable_gqa
         )
-        if torch.backends.cuda.can_use_flash_attention(params, debug=False):
+        if torch.backends.xpu.can_use_flash_attention(params, debug=False):
             available_backends.append(SDPBackend.FLASH_ATTENTION)
-        if torch.backends.cuda.can_use_efficient_attention(params, debug=False):
+        if torch.backends.xpu.can_use_efficient_attention(params, debug=False):
             available_backends.append(SDPBackend.EFFICIENT_ATTENTION)
 
         for backend in available_backends:

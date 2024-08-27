@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from typing import List
 
 import torch
+import intel_extension_for_pytorch
+import oneccl_bindings_for_pytorch
 import torch.nn as nn
 from torch import distributed as dist
 from torch.distributed.utils import _apply_to_tensors, _replace_by_prefix
@@ -35,11 +37,11 @@ if TEST_WITH_DEV_DBG_ASAN:
 
 class TestUtils(TestCase):
     @parametrize(
-        "devices", [["cpu"], ["cuda"], subtest(["cpu", "cuda"], name="cpu_cuda")]
+        "devices", [["cpu"], ["xpu"], subtest(["cpu", "xpu"], name="cpu_xpu")]
     )
     def test_apply_to_tensors(self, devices):
-        if "cuda" in devices and (
-            not torch.cuda.is_available() or torch.cuda.device_count() < 1
+        if "xpu" in devices and (
+            not torch.xpu.is_available() or torch.xpu.device_count() < 1
         ):
             raise unittest.SkipTest("Skipped due to lack of GPU")
 

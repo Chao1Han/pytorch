@@ -5,6 +5,8 @@ import warnings
 from contextlib import nullcontext
 
 import torch
+import intel_extension_for_pytorch
+import oneccl_bindings_for_pytorch
 from torch import distributed as dist
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.fsdp.fully_sharded_data_parallel import ShardingStrategy
@@ -100,7 +102,7 @@ class TestFSDPExecOrder(FSDPTest):
 
     @property
     def device(self):
-        return torch.device("cuda")
+        return torch.device("xpu")
 
     @skip_if_lt_x_gpu(2)
     @parametrize(

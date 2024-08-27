@@ -5,6 +5,8 @@ import sys
 from unittest import mock
 
 import torch
+import intel_extension_for_pytorch
+import oneccl_bindings_for_pytorch
 import torch.distributed as dist
 import torch.nn as nn
 from torch.distributed.fsdp import BackwardPrefetch, CPUOffload, MixedPrecision
@@ -39,12 +41,12 @@ class LinearUnusedInput(nn.Linear):
 class ModelUnusedInput(nn.Module):
     def __init__(self, freeze: bool):
         super().__init__()
-        self.layer0 = LinearUnusedInput(4, 4, device="cuda")
-        self.layer1_frozen = LinearUnusedInput(4, 4, device="cuda")
+        self.layer0 = LinearUnusedInput(4, 4, device="xpu")
+        self.layer1_frozen = LinearUnusedInput(4, 4, device="xpu")
         if freeze:
             for param in self.layer1_frozen.parameters():
                 param.requires_grad = False
-        self.layer2 = LinearUnusedInput(4, 4, device="cuda")
+        self.layer2 = LinearUnusedInput(4, 4, device="xpu")
 
     def forward(self, frozen_input, learnable_input):
         x = self.layer0(frozen_input, learnable_input)
@@ -60,13 +62,13 @@ class TestFSDPFineTune(FSDPTest):
 
     @property
     def world_size(self) -> int:
-        return min(torch.cuda.device_count(), 2)
+        return min(torch.xpu.device_count(), 2)
 
     def _init_seq_module(self) -> nn.Module:
         torch.manual_seed(42)
         modules = []
         for _ in range(self.NUM_LINEARS):
-            modules += [nn.Linear(5, 5, device="cuda"), nn.ReLU()]
+            modules += [nn.Linear(5, 5, device="xpu"), nn.ReLU()]
         seq = nn.Sequential(*modules)
         self._set_seq_module_requires_grad(seq, False)
         return seq
@@ -162,7 +164,7 @@ class TestFSDPFineTune(FSDPTest):
                     self._set_seq_module_requires_grad(seq, True)
 
                 inp = torch.randn(
-                    (8, 5), device="cuda", requires_grad=inp_requires_grad
+                    (8, 5), device="xpu", requires_grad=inp_requires_grad
                 )
                 if step_idx == nograd_step_idx:
                     with torch.no_grad():
@@ -181,9 +183,9 @@ class TestFSDPFineTune(FSDPTest):
         class TestModule(nn.Module):
             def __init__(self) -> None:
                 super().__init__()
-                self.layer_0 = nn.Linear(5, 5, device="cuda")
-                self.layer_no_grad = nn.Linear(5, 5, device="cuda")
-                self.layer_with_grad = nn.Linear(5, 5, device="cuda")
+                self.layer_0 = nn.Linear(5, 5, device="xpu")
+                self.layer_no_grad = nn.Linear(5, 5, device="xpu")
+                self.layer_with_grad = nn.Linear(5, 5, device="xpu")
                 self.layer_no_grad.requires_grad_(False)
 
             def forward(self, x):
@@ -243,7 +245,7 @@ class TestFSDPFineTune(FSDPTest):
         torch.manual_seed(self.rank + 1)
         losses = []
         for _ in range(6):
-            inp = torch.randn((8, 5), device="cuda", requires_grad=inp_requires_grad)
+            inp = torch.randn((8, 5), device="xpu", requires_grad=inp_requires_grad)
             for seq, optim in ((fsdp_seq, fsdp_optim), (ddp_seq, ddp_optim)):
                 loss = seq(inp).sum()
                 losses.append(loss)
@@ -290,7 +292,7 @@ class TestFSDPFineTune(FSDPTest):
         torch.manual_seed(self.rank + 1)
         losses = []
         for _ in range(6):
-            inp = torch.randn((8, 5), device="cuda")
+            inp = torch.randn((8, 5), device="xpu")
             for seq, optim in ((fsdp_seq, fsdp_optim), (ddp_seq, ddp_optim)):
                 loss = seq(inp).sum()
                 losses.append(loss)
@@ -365,8 +367,8 @@ class TestFSDPFineTune(FSDPTest):
         torch.manual_seed(self.rank + 1)
         losses = []
         for idx in range(6):
-            frozen_input = torch.randn((4, 4), device="cuda", requires_grad=False)
-            learnable_input = torch.randn((4, 4), device="cuda", requires_grad=True)
+            frozen_input = torch.randn((4, 4), device="xpu", requires_grad=False)
+            learnable_input = torch.randn((4, 4), device="xpu", requires_grad=True)
             for _model, _optim in ((model, model_optim), (ref_model, ref_model_optim)):
                 loss = _model(frozen_input, frozen_input).sum()
                 losses.append(loss)

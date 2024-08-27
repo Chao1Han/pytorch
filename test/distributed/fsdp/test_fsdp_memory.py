@@ -3,6 +3,8 @@
 import sys
 
 import torch
+import intel_extension_for_pytorch
+import oneccl_bindings_for_pytorch
 import torch.nn as nn
 import torch.optim as optim
 from torch import distributed as dist
@@ -32,8 +34,8 @@ if TEST_WITH_DEV_DBG_ASAN:
 
 def get_cur_mem(rank, result, prefix):
     """Collect memory allocated values in a result dict in MB"""
-    torch._C._cuda_clearCublasWorkspaces()
-    result[prefix] = round(torch.cuda.memory_allocated() / 1024 / 1024)
+    torch._C._xpu_clearCublasWorkspaces()
+    result[prefix] = round(torch.xpu.memory_allocated() / 1024 / 1024)
 
 
 class Model(nn.Module):
@@ -110,14 +112,14 @@ class TestFSDPMemory(FSDPTest):
         gpu_id = self.rank
         world_size = self.world_size
 
-        batch = torch.randn(size=(2, 3, 224, 224)).cuda()
+        batch = torch.randn(size=(2, 3, 224, 224)).xpu()
 
         model = create_model(
             with_fsdp=True,
             with_checkpoint=with_checkpoint,
             model_hidden_dim=model_hidden_dim,
         )
-        model = model.cuda()
+        model = model.xpu()
         model = FSDP(model)
 
         # We enable momentum so that after the first iteration, the optimizer state is added
@@ -133,7 +135,7 @@ class TestFSDPMemory(FSDPTest):
             get_cur_mem(gpu_id, results, f"iter {iteration}: after fwd")
 
             out = sum(o.sum() for o in out[0])
-            fake_loss = criterion(out, torch.tensor(0.0).cuda())
+            fake_loss = criterion(out, torch.tensor(0.0).xpu())
             get_cur_mem(gpu_id, results, f"iter {iteration}: after loss")
 
             fake_loss.backward()
@@ -166,8 +168,8 @@ class TestFSDPMemory(FSDPTest):
 
         model = create_model(
             with_fsdp=False, with_checkpoint=False, model_hidden_dim=model_hidden_dim
-        ).cuda()
-        model_size_mb = round(torch.cuda.memory_allocated() / 1024 / 1024)
+        ).xpu()
+        model_size_mb = round(torch.xpu.memory_allocated() / 1024 / 1024)
         del model
 
         sharded_model_size_mb = int(model_size_mb / self.world_size)

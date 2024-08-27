@@ -337,7 +337,7 @@ else:
 
     _mesh_resources: _MeshEnv = _MeshEnv()
 
-    def _get_device_handle(device_type: str = "cuda"):
+    def _get_device_handle(device_type: str = "xpu"):
         """
         Get the module corresponding to the device_type which is cuda or cuda-like device.
         For example, when the device_type is cuda, the module `torch.cuda` is returned.
@@ -475,12 +475,13 @@ else:
                 # Otherwise, create new pg.
                 default_group = _get_default_group()
                 ranks = list(range(get_world_size()))
-                dim_group = (
-                    new_group(backend="cpu:gloo,cuda:nccl", ranks=ranks)
-                    if torch.cuda.is_available()
-                    and get_backend(default_group) == "gloo"
-                    else default_group
-                )
+                if torch.cuda.is_available() and get_backend(default_group) == "gloo":
+                    dim_group = new_group(backend="cpu:gloo,cuda:nccl", ranks=ranks)
+                elif torch.xpu.is_available():
+                    # zl_todo: xccl only for XPU, then need to add gloo for CPU
+                    dim_group = new_group(backend="xpu:ccl", ranks=ranks)
+                else:
+                    default_group
                 dim_group_infos.append(
                     (
                         _get_group_tag(dim_group),

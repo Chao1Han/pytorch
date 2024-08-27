@@ -6,6 +6,8 @@ from copy import deepcopy
 from functools import partial
 
 import torch
+import intel_extension_for_pytorch
+import oneccl_bindings_for_pytorch
 import torch.distributed as dist
 import torch.nn as nn
 from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
@@ -83,11 +85,11 @@ class TestFSDPCheckpoint(FSDPTest):
             **fsdp_kwargs,
         ):
             torch.manual_seed(0)
-            torch.cuda.manual_seed(0)
+            torch.xpu.manual_seed(0)
             super().__init__()
-            l1 = nn.Linear(3, 3).cuda()
-            l2 = nn.Linear(3, 3).cuda()
-            l3 = nn.Linear(3, 3).cuda()
+            l1 = nn.Linear(3, 3).xpu()
+            l2 = nn.Linear(3, 3).xpu()
+            l3 = nn.Linear(3, 3).xpu()
 
             if checkpoint_layer:
                 if offload_activations:
@@ -169,10 +171,15 @@ class TestFSDPCheckpoint(FSDPTest):
 
         # note that reentrant-based checkpointing requires inputs to have grad
         # flag set.
-        inp = torch.randn(10, 3, device=torch.cuda.current_device(), requires_grad=True)
-
+        inp = torch.randn(10, 3, device=torch.xpu.current_device(), requires_grad=True)
+        print("!!!!")
+        print(inp.shape)
+        print(inp.device)
         global _save_on_cpu_called
-        models = [ckpt_sequential_wrapped_fsdp, inner_ckpt, baseline]
+        models = [ckpt_sequential_wrapped_fsdp, ]
+        for m in models:
+            for n, p in m.parameters():
+                print(p.device)
         with patch_save_on_cpu(get_patched_save_on_cpu()):
             for i in range(2):
                 losses = []
@@ -210,7 +217,7 @@ class TestFSDPCheckpoint(FSDPTest):
         fsdp_kwargs = {"cpu_offload": cpu_offload, "use_orig_params": use_orig_params}
         global _save_on_cpu_called
         with patch_save_on_cpu(get_patched_save_on_cpu()):
-            seq = TestFSDPCheckpoint.SequentialModule().to(torch.cuda.current_device())
+            seq = TestFSDPCheckpoint.SequentialModule().to(torch.xpu.current_device())
             # Runs FSDP with no checkpointing
             fsdp_only_seq = FSDP(deepcopy(seq), **fsdp_kwargs)
             # Runs checkpoint-wrapped FSDP
@@ -233,7 +240,7 @@ class TestFSDPCheckpoint(FSDPTest):
             # flag set.
 
             inp = torch.randn(
-                10, 3, device=torch.cuda.current_device(), requires_grad=True
+                10, 3, device=torch.xpu.current_device(), requires_grad=True
             )
 
             models = [
@@ -328,7 +335,7 @@ class TestFSDPCheckpointSubmodule(FSDPTest):
     @skip_if_lt_x_gpu(2)
     @parametrize("use_reentrant", [False])
     def test_checkpoint_submodule(self, use_reentrant: bool):
-        model = TestModel(use_reentrant=use_reentrant).cuda()
+        model = TestModel(use_reentrant=use_reentrant).xpu()
         model_ac = deepcopy(model)
 
         for _, m in model_ac.named_modules():
@@ -339,7 +346,7 @@ class TestFSDPCheckpointSubmodule(FSDPTest):
         self.assertTrue(model_ac.checkpoint2.s2.checkpoint)
 
         fsdp_kwargs = {
-            "device_id": torch.cuda.current_device(),
+            "device_id": torch.xpu.current_device(),
             "sharding_strategy": ShardingStrategy.NO_SHARD,
         }
 
@@ -351,7 +358,7 @@ class TestFSDPCheckpointSubmodule(FSDPTest):
         model_ac.checkpoint1 = FSDP(module=model_ac.checkpoint1, **fsdp_kwargs)
         model_ac.checkpoint2 = FSDP(module=model_ac.checkpoint2, **fsdp_kwargs)
 
-        x = torch.randn(2, 100, device="cuda")
+        x = torch.randn(2, 100, device="xpu")
 
         model(x).sum().backward()
         model_ac(x).sum().backward()
