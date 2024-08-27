@@ -32,9 +32,16 @@ from torch.testing._internal.common_distributed import (
 
 from torch.utils._pytree import tree_flatten, tree_unflatten, TreeSpec
 
-DEVICE_TYPE = (
-    "cuda" if torch.cuda.is_available() and torch.cuda.device_count() > 1 else "cpu"
-)
+
+if torch.cuda.is_available() and torch.cuda.device_count() > 1:
+    DEVICE_TYPE = "cuda"
+    PG_BACKEND = "nccl"
+elif torch.xpu.is_available():
+    DEVICE_TYPE = "xpu"
+    PG_BACKEND = "ccl"
+else:
+    DEVICE_TYPE = "cpu"
+    PG_BACKEND = "gloo"
 
 NUM_DEVICES = 4
 
@@ -301,17 +308,16 @@ class DTensorTestBase(MultiProcessTestCase):
 
     @property
     def backend(self) -> str:
-        backend = "nccl" if self.device_type == "cuda" else "gloo"
-        return backend
+        return PG_BACKEND
 
     def build_device_mesh(self) -> DeviceMesh:
-        return DeviceMesh(self.device_type, list(range(self.world_size)))
+        return DeviceMesh(DEVICE_TYPE, list(range(self.world_size)))
 
     def init_pg(self) -> None:
         if "nccl" in self.backend and torch.cuda.device_count() < self.world_size:
             sys.exit(TEST_SKIPS[f"multi-gpu-{self.world_size}"].exit_code)
 
-        if self.backend not in ["nccl", "gloo", "mpi", "cpu:gloo,cuda:nccl"]:
+        if self.backend not in ["ccl", "nccl", "gloo", "mpi", "cpu:gloo,cuda:nccl"]:
             raise RuntimeError(f"Backend {self.backend} not supported!")
 
         dist.init_process_group(
@@ -324,6 +330,8 @@ class DTensorTestBase(MultiProcessTestCase):
         # set device for nccl pg for collectives
         if "nccl" in self.backend:
             torch.cuda.set_device(self.rank)
+        elif "ccl" in self.backend:
+            torch.xpu.set_device(self.rank)
 
     def destroy_pg(self) -> None:
         # Wait for all ranks to reach here before starting shutdown.
@@ -363,11 +371,13 @@ def with_comms(func: TestFunc) -> TestFunc:
     def wrapper(
         self, *args: Tuple[object], **kwargs: Dict[str, Any]  # type: ignore[misc]
     ) -> None:
-        # if enough GPU we can use GPU, otherwise we fallback to CPU
-        if not torch.cuda.is_available() or torch.cuda.device_count() < self.world_size:
-            self.device_type = "cpu"
+        # if backend not specified, and cuda available, then use nccl, else gloo
+        if torch.cuda.is_available() and torch.cuda.device_count() >= self.world_size:
+            self.device_type = "cuda"
+        elif torch.xpu.is_available() and torch.xpu.device_count() >= self.world_size:
+            self.device_type = "xpu"
         else:
-            self.device_type = DEVICE_TYPE
+            self.device_type = "cpu"
 
         self.init_pg()
 

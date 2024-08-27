@@ -909,6 +909,8 @@ class TestDTensorPlacementTypes(DTensorTestBase):
         tensor = torch.rand(size)
         if self.device_type == "cuda":
             return tensor.cuda()
+        elif self.device_type == "xpu":
+            return tensor.xpu()
         else:
             return tensor
 
@@ -964,7 +966,7 @@ class TestDTensorPlacementTypes(DTensorTestBase):
 
 class DTensorLogTest(LoggingTestCase):
     def test_dtensor_log(self):
-        if not torch.distributed.is_available() or not torch.cuda.is_available():
+        if not torch.distributed.is_available() or not torch.cuda.is_available() or not torch.xpu.is_available():
             return
 
         env = dict(os.environ)

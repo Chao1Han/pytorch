@@ -2056,7 +2056,7 @@ class FullyShardedDataParallel(nn.Module, _FSDPState):
             def __init__(
                 self,
                 flat_param_handle: Optional[FlatParamHandle],
-                unshard_event: torch.Event,
+                unshard_event: torch.xpu.Event,
             ):
                 self._flat_param_handle = flat_param_handle
                 self._unshard_event = unshard_event

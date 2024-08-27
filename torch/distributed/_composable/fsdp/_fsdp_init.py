@@ -58,7 +58,12 @@ def _init_default_fully_shard_mesh() -> DeviceMesh:
     if not dist.distributed_c10d.is_initialized():
         dist.distributed_c10d.init_process_group()
     default_pg = dist.distributed_c10d._get_default_group()
-    device_type = "cuda" if torch.cuda.is_available() else "cpu"
+    if torch.cuda.is_available():
+        device_type = "cuda"
+    elif torch.xpu.is_available():
+        device_type = "xpu"
+    else:
+        device_type = "cpu"
     mesh = init_device_mesh(device_type, mesh_shape=(default_pg.size(),))
     return mesh
 
