@@ -1268,12 +1268,13 @@ class FSDPTest(MultiProcessTestCase):
         optim = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9)
         for _ in range(num_steps):
             optim.zero_grad()
-            with torch.amp.autocast(enabled=autocast):
+            if torch.cuda.is_available():
+                autocast_device = "cuda"
+            else:
+                autocast_device = "xpu"
+            with torch.amp.autocast(autocast_device, enabled=autocast):
                 # Inputs always cuda regardless of cpu offloading, or model.device
-                if torch.cuda.is_available():
-                    input = model.module.get_input(torch.device("cuda"))
-                elif torch.xpu.is_available():
-                    input = model.module.get_input(torch.device("xpu"))
+                input = model.module.get_input(torch.device(autocast_device))
                 if use_pure_fp16 or (mixed_precision and not isinstance(model, FSDP)):
                     if isinstance(input, torch.Tensor):
                         input = input.half()
