@@ -77,7 +77,7 @@ class TestParityWithDDP(FSDPTest):
     PyTorch DDP vs. FullyShardedDataParallel.
     """
 
-    def _get_xpu_init_modes(self, cpu_offload: CPUOffload) -> List[CUDAInitMode]:
+    def _get_cuda_init_modes(self, cpu_offload: CPUOffload) -> List[CUDAInitMode]:
         modes = [
             CUDAInitMode.CUDA_AFTER,
             CUDAInitMode.CUDA_BEFORE,
@@ -95,7 +95,7 @@ class TestParityWithDDP(FSDPTest):
         """Returns a subtest configuration that subtests CUDA initialization
         modes and prefetching settings together."""
         return {
-            "xpu_init_mode": self._get_xpu_init_modes(cpu_offload),
+            "cuda_init_mode": self._get_cuda_init_modes(cpu_offload),
             "backward_prefetch": [
                 None,
                 BackwardPrefetch.BACKWARD_PRE,
@@ -302,14 +302,14 @@ class TestParamInit(FSDPTest):
 
 class TestHooks(FSDPTest):
     @skip_if_lt_x_gpu(2)
-    @parametrize("xpu_first", [False, True])
-    def test_pre_backward_hook_registration(self, xpu_first: bool):
+    @parametrize("cuda_first", [False, True])
+    def test_pre_backward_hook_registration(self, cuda_first: bool):
         """Tests that FSDP pre-backward hooks are registered on forward pass
         outputs."""
         fsdp_model = TransformerWithSharedParams.init(
             self.process_group,
             FSDPInitMode.RECURSIVE,
-            CUDAInitMode.CUDA_BEFORE if xpu_first else CUDAInitMode.CUDA_AFTER,
+            CUDAInitMode.CUDA_BEFORE if cuda_first else CUDAInitMode.CUDA_AFTER,
         )
         self._test_pre_backward_hook_registration(fsdp_model)
 
@@ -343,9 +343,9 @@ class TestHooks(FSDPTest):
         self.assertEqual(len(output._backward_hooks), 1)
 
     @skip_if_lt_x_gpu(2)
-    @parametrize("xpu_first", [False, True])
+    @parametrize("cuda_first", [False, True])
     @parametrize("mixed_precision", [True, False])
-    def test_register_functions_called(self, xpu_first: bool, mixed_precision: bool):
+    def test_register_functions_called(self, cuda_first: bool, mixed_precision: bool):
         """Tests that ``_register_{pre|post}_backward_hooks()`` are called
         during the FSDP forward."""
         fsdp_kwargs = {}
@@ -354,7 +354,7 @@ class TestHooks(FSDPTest):
         fsdp_model = TransformerWithSharedParams.init(
             self.process_group,
             FSDPInitMode.RECURSIVE,
-            CUDAInitMode.CUDA_BEFORE if xpu_first else CUDAInitMode.CUDA_AFTER,
+            CUDAInitMode.CUDA_BEFORE if cuda_first else CUDAInitMode.CUDA_AFTER,
             fsdp_kwargs,
         )
         input = fsdp_model.module.get_input(torch.device("xpu"))
