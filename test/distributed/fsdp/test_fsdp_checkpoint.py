@@ -176,10 +176,7 @@ class TestFSDPCheckpoint(FSDPTest):
         print(inp.shape)
         print(inp.device)
         global _save_on_cpu_called
-        models = [ckpt_sequential_wrapped_fsdp, ]
-        for m in models:
-            for n, p in m.parameters():
-                print(p.device)
+        models = [ckpt_sequential_wrapped_fsdp, inner_ckpt, baseline]
         with patch_save_on_cpu(get_patched_save_on_cpu()):
             for i in range(2):
                 losses = []
