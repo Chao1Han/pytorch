@@ -5,6 +5,8 @@ from typing import Any, Callable, Dict, Optional, Sequence
 from unittest import skip
 
 import torch
+import intel_extension_for_pytorch
+import oneccl_bindings_for_pytorch
 import torch.utils._pytree as pytree
 from torch import Tensor
 from torch.distributed._tensor import DeviceMesh, distribute_tensor, DTensor

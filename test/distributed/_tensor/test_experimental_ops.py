@@ -3,6 +3,8 @@
 
 
 import torch
+import intel_extension_for_pytorch
+import oneccl_bindings_for_pytorch
 import torch.distributed as dist
 from torch.distributed._tensor import DeviceMesh, distribute_tensor, Replicate
 from torch.testing._internal.common_utils import run_tests

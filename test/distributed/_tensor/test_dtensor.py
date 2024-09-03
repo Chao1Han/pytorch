@@ -6,6 +6,8 @@ import os
 from numpy.testing import assert_array_equal
 
 import torch
+import intel_extension_for_pytorch
+import oneccl_bindings_for_pytorch
 import torch.nn.functional as F
 from torch.distributed._functional_collectives import AsyncCollectiveTensor
 from torch.distributed._tensor import (

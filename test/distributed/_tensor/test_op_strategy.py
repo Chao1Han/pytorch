@@ -3,6 +3,8 @@
 from itertools import chain
 
 import torch
+import intel_extension_for_pytorch
+import oneccl_bindings_for_pytorch
 from torch.distributed._tensor import DeviceMesh, DTensor
 from torch.distributed._tensor.placement_types import (
     DTensorSpec,

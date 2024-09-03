@@ -9,6 +9,8 @@ from typing import Any, Callable, Dict, Tuple
 import numpy as np
 
 import torch
+import intel_extension_for_pytorch
+import oneccl_bindings_for_pytorch
 from torch import nn
 from torch.distributed._tensor import (
     DeviceMesh,
