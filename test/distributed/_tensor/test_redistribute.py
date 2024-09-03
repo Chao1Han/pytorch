@@ -4,6 +4,8 @@
 import itertools
 
 import torch
+import intel_extension_for_pytorch
+import oneccl_bindings_for_pytorch
 from torch.distributed._tensor import DeviceMesh, distribute_tensor, DTensor
 from torch.distributed._tensor._collective_utils import shard_dim_alltoall
 from torch.distributed._tensor.debug import CommDebugMode
