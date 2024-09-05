@@ -5,6 +5,8 @@ import sys
 from functools import partial, wraps
 
 import torch
+import intel_extension_for_pytorch
+import oneccl_bindings_for_pytorch
 import torch.distributed as dist
 
 
@@ -23,8 +25,15 @@ if TEST_WITH_DEV_DBG_ASAN:
     )
     sys.exit(0)
 
-BACKEND = dist.Backend.NCCL if torch.cuda.is_available() else dist.Backend.GLOO
-WORLD_SIZE = min(4, max(2, torch.cuda.device_count()))
+if torch.xpu.is_available():
+    BACKEND = dist.Backend.CCL
+elif torch.cuda.is_available():
+    BACKEND = dist.Backend.NCCL
+else:
+    BACKEND = dist.Backend.GLOO
+
+device_count = torch.xpu.device_count() if torch.xpu.is_available() else torch.cuda.device_count()
+WORLD_SIZE = min(4, max(2, device_count))
 
 
 def with_comms(func=None):
@@ -35,8 +44,10 @@ def with_comms(func=None):
 
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        if BACKEND == dist.Backend.NCCL and torch.cuda.device_count() < self.world_size:
+        if BACKEND == dist.Backend.NCCL and torch.cuda.device_count() < self.world_size \
+            or BACKEND == dist.Backend.CCL and torch.xpu.device_count() < self.world_size:
             sys.exit(TEST_SKIPS[f"multi-gpu-{self.world_size}"].exit_code)
+
         self.dist_init()
         func(self)
         self.destroy_comms()
@@ -83,6 +94,8 @@ class TestObjectCollectives(MultiProcessTestCase):
         # set device for nccl pg for collectives
         if BACKEND == "nccl":
             torch.cuda.set_device(self.rank)
+        elif BACKEND == "ccl":
+            torch.xpu.set_device(self.rank)
 
     @with_comms()
     def test_all_gather_object(self):
