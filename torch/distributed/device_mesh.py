@@ -477,11 +477,10 @@ else:
                 ranks = list(range(get_world_size()))
                 if torch.cuda.is_available() and get_backend(default_group) == "gloo":
                     dim_group = new_group(backend="cpu:gloo,cuda:nccl", ranks=ranks)
-                elif torch.xpu.is_available():
-                    # zl_todo: xccl only for XPU, then need to add gloo for CPU
-                    dim_group = new_group(backend="xpu:ccl", ranks=ranks)
+                elif torch.xpu.is_available() and get_backend(default_group) == "gloo":
+                    dim_group = new_group(backend="cpu:gloo,xpu:ccl", ranks=ranks)
                 else:
-                    default_group
+                    dim_group = default_group
                 dim_group_infos.append(
                     (
                         _get_group_tag(dim_group),

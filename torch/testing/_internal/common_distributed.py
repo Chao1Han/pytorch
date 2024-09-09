@@ -302,6 +302,12 @@ def requires_gloo():
         "c10d was not compiled with the Gloo backend",
     )
 
+def requires_cuda():
+    return skip_but_pass_in_sandcastle_if(
+        not torch.cuda.is_available(),
+        "cuda was not available",
+    )
+
 
 def requires_nccl_version(version, msg):
     if not c10d.is_nccl_available():

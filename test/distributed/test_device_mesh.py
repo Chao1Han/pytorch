@@ -188,7 +188,6 @@ class DeviceMeshTest(DTensorTestBase):
             device_type = "cuda"
         else:
             device_type = "cpu"
-        print(f"device_type is {device_type}")
         mesh = DeviceMesh(device_type, torch.arange(self.world_size))
 
         local_tensor = torch.randn(2, 8)
