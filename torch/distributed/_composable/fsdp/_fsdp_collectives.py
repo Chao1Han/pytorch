@@ -17,7 +17,7 @@ from ._fsdp_param import FSDPParam, ShardedState
 
 class AllGatherResult(NamedTuple):
     all_gather_output: torch.Tensor
-    all_gather_event: Optional[torch.xpu.Event]
+    all_gather_event: Optional[torch.Event]
     all_gather_work: Optional[dist.distributed_c10d.Work]
     # For each parameter, the all-gather input dtype for each input
     param_all_gather_input_dtypes: List[List[torch.dtype]]
@@ -131,8 +131,8 @@ def foreach_all_gather(
     fsdp_params: List[FSDPParam],
     group: dist.ProcessGroup,
     async_op: bool,
-    all_gather_copy_in_stream: torch.xpu.Stream,
-    all_gather_stream: torch.xpu.Stream,
+    all_gather_copy_in_stream: torch.Stream,
+    all_gather_stream: torch.Stream,
     device: torch.device,
 ) -> Optional[AllGatherResult]:
     world_size, rank = group.size(), group.rank()
@@ -285,16 +285,16 @@ def foreach_reduce(
     fsdp_params: List[FSDPParam],
     unsharded_grads: List[torch.Tensor],
     reduce_scatter_group: dist.ProcessGroup,
-    reduce_scatter_stream: torch.xpu.Stream,
+    reduce_scatter_stream: torch.Stream,
     orig_dtype: torch.dtype,
     reduce_dtype: Optional[torch.dtype],
     device: torch.device,
     reduce_scatter_reduce_op: Optional[Union[dist.ReduceOp, dist.ReduceOp.RedOpType]],
     all_reduce_group: Optional[dist.ProcessGroup],  # not `None` iff HSDP
-    all_reduce_stream: torch.xpu.Stream,
+    all_reduce_stream: torch.Stream,
     all_reduce_grads: bool,
     partial_reduce_output: Optional[torch.Tensor],  # only used for HSDP
-) -> Tuple[torch.Tensor, torch.xpu.Event, torch.xpu.Event, Optional[torch.Tensor]]:
+) -> Tuple[torch.Tensor, torch.Event, torch.Event, Optional[torch.Tensor]]:
     """
     ``unsharded_grads`` owns the references to the gradients computed by
     autograd, so clearing the list frees the gradients.

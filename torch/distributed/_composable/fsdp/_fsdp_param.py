@@ -232,7 +232,7 @@ class FSDPParam:
         self.pin_memory = (
             self.offload_to_cpu and cast(CPUOffloadPolicy, offload_policy).pin_memory
         )
-        self.grad_offload_event: Optional[torch.xpu.Event] = None
+        self.grad_offload_event: Optional[torch.Event] = None
         self._init_sharded_param(param, device)
         if self.post_forward_mesh_info:
             self._init_sharded_post_forward_param_metadata(param)
