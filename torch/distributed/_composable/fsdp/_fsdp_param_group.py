@@ -53,17 +53,17 @@ class FSDPCommContext:
         # All-gather state and copy-in stream allow overlapping the next
         # copy-in with the current all-gather in forward; copy-in overlaps with
         # reduce-scatter in backward without the separate copy-in stream
-        self.all_gather_copy_in_stream = torch.xpu.Stream(priority=high_priority)
+        self.all_gather_copy_in_stream = torch.Stream(priority=high_priority)
         # All-gather stream allows overlapping next all-gather with current
         # forward compute
-        self.all_gather_stream = torch.xpu.Stream(priority=high_priority)
+        self.all_gather_stream = torch.Stream(priority=high_priority)
         # Reduce-scatter stream gives separate execution "thread" for post-
         # backward logic like pre/post-gradient division and reduce-scatter
-        self.reduce_scatter_stream = torch.xpu.Stream(priority=high_priority)
+        self.reduce_scatter_stream = torch.Stream(priority=high_priority)
         # Run the HSDP all-reduces concurrently with all-gather/reduce-scatter
         # since collectives use different network resources and can overlap
         # in the typical intra-node sharding / inter-node replication case
-        self.all_reduce_stream = torch.xpu.Stream()
+        self.all_reduce_stream = torch.Stream()
         # All-gather/reduce-scatter states keep references to collective
         # tensors produced in one stream and used in another and accompanying
         # CUDA events for synchronization
