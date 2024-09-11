@@ -17,7 +17,7 @@ class _AllreduceUpcastHookState:
     """
 
     ddp_weakref: Any
-    upcast_stream: torch.xpu.Stream
+    upcast_stream: torch.Stream
     wait_for_stream_enqueued: bool = False
 
 
@@ -47,7 +47,13 @@ def _reducer_allreduce_and_upcast_hook(
     fut = reducer._run_allreduce_hook(bucket)
     ret_fut = torch.futures.Future()
     stream = hook_state.upcast_stream
-    with torch.xpu.stream(stream):
+
+    if stream.type == "xpu":
+        context = torch.xpu.stream
+    else:
+        context = torch.cuda.stream
+
+    with context(stream):
         fut.wait()
         bucket.buffer().div_(process_group.size())
         ret_fut.set_result(bucket.buffer())
@@ -63,7 +69,10 @@ def _reducer_allreduce_and_upcast_hook(
 
     # enqueue a callback to wait for this stream at end of backward
     def wait_for_stream_cb():
-        torch.xpu.current_stream().wait_stream(stream)
+        if stream.device.type == "cuda":
+            torch.xpu.current_stream().wait_stream(stream)
+        else:
+            torch.cuda.current_stream().wait_stream(stream)
         # Remove post-backward hooks since they are re-installed in next
         # iteration, similar to FSDP.
         # Parameters that don't require grad still needed to be casted since
