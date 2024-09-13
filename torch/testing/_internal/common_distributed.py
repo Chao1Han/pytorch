@@ -327,6 +327,12 @@ def requires_nccl():
         "c10d was not compiled with the NCCL backend",
     )
 
+def requires_ccl():
+    return skip_but_pass_in_sandcastle_if(
+        not c10d.is_ccl_available(),
+        "c10d was not compiled with the CCL backend",
+    )
+
 def requires_ucc():
     return skip_but_pass_in_sandcastle_if(
         not c10d.is_ucc_available(),
@@ -470,7 +476,7 @@ def init_multigpu_helper(world_size: int, backend: str):
     On a single node, all visible GPUs are evenly
     divided to subsets, each process only uses a subset.
     """
-    nGPUs = torch.cuda.device_count()
+    nGPUs = torch.xpu.device_count() if torch.xpu.is_available() else torch.cuda.device_count()
     visible_devices = range(nGPUs)
 
     # If rank is less than or equal to number of available GPU's

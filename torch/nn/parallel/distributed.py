@@ -2241,7 +2241,7 @@ class DistributedDataParallel(Module, Joinable):
             or not dist.is_available()
             or not dist.is_nccl_available()
             or torch.cuda.nccl.version() < (2, 10)
-        ):
+        ) and not (torch.xpu.is_available() and dist.is_ccl_available()):
             self._log_and_throw(
                 TypeError,
                 "BF16 all reduce communication hook required CUDA 11+ and NCCL 2.10+.",
