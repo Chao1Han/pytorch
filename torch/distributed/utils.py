@@ -25,6 +25,7 @@ from torch.nn.utils.rnn import PackedSequence
 
 __all__ = []  # type: ignore[var-annotated]
 
+torch_accelerator_context = None
 
 def _pack_kwargs(*args: Any, **kwargs: Any) -> Tuple[Tuple[Any, ...], Tuple[str, ...]]:
     """
@@ -381,3 +382,17 @@ def _get_root_modules(modules: List[nn.Module]) -> List[nn.Module]:
         if is_root_module:
             root_modules.append(candidate_module)
     return root_modules
+
+
+def _accelerator_context():
+    global torch_accelerator_context
+    if torch_accelerator_context is not None:
+        return torch_accelerator_context
+    determined_device = torch._C._get_accelerator()
+    if determined_device.type == "xpu":
+        torch_accelerator_context = torch.xpu
+    elif determined_device.type == "cuda":
+        torch_accelerator_context = torch.cuda
+    else:
+        raise NotImplementedError(f"Device type {determined_device.type} is not supported in PyTorch distributed")
+    return torch_accelerator_context

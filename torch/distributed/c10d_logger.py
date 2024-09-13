@@ -61,7 +61,6 @@ def _get_msg_dict(func_name, *args, **kwargs) -> Dict[str, Any]:
             "global_rank": f"{dist.get_rank()}",
             "local_rank": f"{dist.get_rank(group)}",
         }
-        # zl_todo: do we need ccl version?
         if msg_dict["backend"] == "nccl":
             nccl_version = torch.cuda.nccl.version()
             msg_dict["nccl_version"] = ".".join(str(v) for v in nccl_version)
