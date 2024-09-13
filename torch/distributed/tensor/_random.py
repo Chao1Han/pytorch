@@ -109,10 +109,6 @@ class _RNGStateTracker:
     """
 
     def __init__(self, device_type: str = "cuda"):
-        if torch.cuda.is_available():
-            device_type = "cuda"
-        elif torch.xpu.is_available():
-            device_type = "xpu"
         self._device_type = device_type
         self._device_handle = _get_device_handle(device_type)
         if not (self._device_handle and self._device_handle.is_available()):
@@ -165,10 +161,6 @@ class OffsetBasedRNGTracker(_RNGStateTracker):
     """
 
     def __init__(self, device_type: str = "cuda"):
-        if torch.cuda.is_available():
-            device_type = "cuda"
-        elif torch.xpu.is_available():
-            device_type = "xpu"
         super().__init__(device_type)
         # synchronize RNG state using rank 0's current one
         rng_state = self._device_handle.get_rng_state().to(device_type)
@@ -349,10 +341,6 @@ class OffsetBasedRNGTracker(_RNGStateTracker):
 
 class TensorParallelRNGTracker(_RNGStateTracker):
     def __init__(self, device_type: str = "cuda"):
-        if torch.cuda.is_available():
-            device_type = "cuda"
-        elif torch.xpu.is_available():
-            device_type = "xpu"
         super().__init__(device_type)
         # copy the default RNG state
         self.rng_states["tensor-parallel-rng"] = self._device_handle.get_rng_state()

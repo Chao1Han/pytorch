@@ -17,7 +17,6 @@ if TYPE_CHECKING:
 BYTES_PER_MB = 1024 * 1024.0
 
 
-#zl_todo: no need to support it?
 class MemoryProfileDispatchMode(TorchDispatchMode):
     """Run in ``TorchDispatchMode`` to get memory stats at operator level."""
 
@@ -42,7 +41,7 @@ class MemoryProfileDispatchMode(TorchDispatchMode):
 
         return rs
 
-#zl_todo: only for cuda?
+
 class MemoryTracker:
     """
     Collect and plot the memory stats at operator level.
