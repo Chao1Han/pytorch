@@ -44,7 +44,7 @@ class FSDPCommContext:
     """This has the communication state shared across FSDP states/parameter groups."""
 
     def lazy_init(self):
-        if not (torch.cuda.is_available() and torch.xpu.is_available()):
+        if not torch.cuda.is_available() and not torch.xpu.is_available():
             raise RuntimeError("FSDP requires CUDA/XPU for streams")
         # Setting the all-gather/reduce-scatter streams to be higher priority
         # can help avoid some issues where their copies in/out are delayed and
