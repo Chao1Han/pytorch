@@ -6,6 +6,8 @@ import unittest
 from typing import Dict
 
 import torch
+import intel_extension_for_pytorch
+import oneccl_bindings_for_pytorch
 import torch.nn as nn
 from torch.distributed._composable.fsdp import CPUOffloadPolicy, fully_shard
 from torch.distributed._tensor import distribute_tensor, DTensor
@@ -29,7 +31,7 @@ from torch.testing._internal.distributed._tensor.common_dtensor import (
 class TestFullyShardStateDictMultiProcess(FSDPTest):
     @property
     def world_size(self) -> int:
-        return min(8, torch.cuda.device_count())
+        return min(8, torch.xpu.device_count())
 
     @skip_if_lt_x_gpu(2)
     def test_dp_state_dict_save_load(self):
@@ -40,7 +42,7 @@ class TestFullyShardStateDictMultiProcess(FSDPTest):
         )
         if self.world_size % 2 != 0:
             return
-        hsdp_mesh = init_device_mesh("cuda", (self.world_size // 2, 2))
+        hsdp_mesh = init_device_mesh("xpu", (self.world_size // 2, 2))
         self.run_subtests(
             {"mlp_dim": [2, 3, 4, 5], "mesh": [hsdp_mesh]},
             self._test_dp_state_dict_save_load,
@@ -67,7 +69,7 @@ class TestFullyShardStateDictMultiProcess(FSDPTest):
         fully_shard(model2, mesh=mesh, reshard_after_forward=False)
         self._test_state_dict_save_load(model2)
         ref_sharded_sd = model2.state_dict()
-        inp = torch.randn((2, mlp_dim), device="cuda")
+        inp = torch.randn((2, mlp_dim), device="xpu")
         model2(inp)  # parameters are not resharded after this forward
         # Check that state dict hooks reshard
         sharded_sd = model2.state_dict()
@@ -104,7 +106,7 @@ class TestFullyShardStateDictMultiProcess(FSDPTest):
             model.load_state_dict(sd, assign=True, strict=False)
 
         # lazy init without error
-        inp = torch.rand((mlp_dim, mlp_dim), device="cuda")
+        inp = torch.rand((mlp_dim, mlp_dim), device="xpu")
         model(inp)
 
         state_dict = model.state_dict()
@@ -114,7 +116,7 @@ class TestFullyShardStateDictMultiProcess(FSDPTest):
     def test_2d_state_dict_correctness(self):
         dp_size = 2
         global_mesh = init_device_mesh(
-            "cuda", (dp_size, self.world_size // dp_size), mesh_dim_names=("dp", "tp")
+            "xpu", (dp_size, self.world_size // dp_size), mesh_dim_names=("dp", "tp")
         )
         dp_mesh, tp_mesh = global_mesh["dp"], global_mesh["tp"]
         torch.manual_seed(42)
@@ -154,7 +156,7 @@ class TestFullyShardStateDictMultiProcess(FSDPTest):
     def test_dp_tp_state_dict_save_load(self):
         dp_size = 2
         global_mesh = init_device_mesh(
-            "cuda", (dp_size, self.world_size // dp_size), mesh_dim_names=("dp", "tp")
+            "xpu", (dp_size, self.world_size // dp_size), mesh_dim_names=("dp", "tp")
         )
         self.run_subtests(
             {"mlp_dim": [4, 6, 8, 10]},
@@ -185,7 +187,7 @@ class TestFullyShardStateDictMultiProcess(FSDPTest):
     @skip_if_lt_x_gpu(4)
     def test_hsdp_tp_state_dict_save_load(self):
         global_mesh = init_device_mesh(
-            "cuda",
+            "xpu",
             (2, 2, self.world_size // 4),
             mesh_dim_names=("dp_replicate", "dp_shard", "tp"),
         )
@@ -285,12 +287,12 @@ class TestFullyShardStateDictMultiThread(FSDPTestMultiThread):
     def world_size(self):
         return 2
 
-    @unittest.skipIf(not TEST_CUDA, "no cuda")
+    
     def test_rank0_offload_full_state_dict(self):
         # Construct a reference unsharded model on all ranks
         model_args = ModelArgs(dropout_p=0.0)
         torch.manual_seed(42)
-        ref_model = Transformer(model_args).cuda()
+        ref_model = Transformer(model_args).xpu()
         for param in ref_model.parameters():
             torch.distributed.broadcast(param.detach(), src=0)
 
