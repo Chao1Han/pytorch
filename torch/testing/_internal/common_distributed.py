@@ -86,17 +86,18 @@ TEST_SKIPS = {
 class DistTestCases:
     # Backends that do not support a specific collective
     skip_collective = {}
-    skip_collective["allgather_coalesced"] = {"nccl", "mpi", "ucc"}
+    skip_collective["allgather_coalesced"] = {"nccl", "mpi", "ucc", "ccl"}
     skip_collective["reduce"] = set()
-    skip_collective["sendrecv anysource"] = {"nccl", "ucc"}
+    skip_collective["sendrecv anysource"] = {"nccl", "ucc", "ccl"}
     skip_collective["cpu barrier"] = {"nccl", "ucc"}
 
     # Sets showing that something is implemented
     backend_feature = {}
-    backend_feature["gpu"] = {"nccl", "gloo", "ucc"}
+    backend_feature["gpu"] = {"nccl", "gloo", "ucc", "ccl"}
     backend_feature["cuda"] = {"nccl", "gloo", "ucc"}
+    backend_feature["xpu"] = {"ccl", "gloo"}
     backend_feature["ddp"] = {"nccl", "gloo", "ucc"}
-    backend_feature["subgroup"] = {"nccl", "gloo", "ucc"}
+    backend_feature["subgroup"] = {"nccl", "gloo", "ucc", "ccl"}
     backend_feature["plugin"] = set()
 
 
@@ -106,10 +107,11 @@ def skip_if_no_gpu(func):
 
     @wraps(func)
     def wrapper(*args, **kwargs):
-        if not torch.cuda.is_available():
+        if not torch.cuda.is_available() and not torch.xpu.is_available():
             sys.exit(TEST_SKIPS["no_cuda"].exit_code)
         world_size = int(os.environ["WORLD_SIZE"])
-        if torch.cuda.device_count() < world_size:
+        device_count = torch.xpu.device_count() if torch.xpu.is_available() else torch.cuda.device_count()
+        if device_count < world_size:
             sys.exit(TEST_SKIPS[f"multi-gpu-{world_size}"].exit_code)
 
         return func(*args, **kwargs)
