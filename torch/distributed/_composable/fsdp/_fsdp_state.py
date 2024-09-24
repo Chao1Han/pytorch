@@ -27,7 +27,7 @@ from torch.distributed._composable_state import (
 )
 from torch.distributed.utils import _to_kwargs
 from torch.utils._pytree import tree_flatten, tree_map
-from torch.distributed.utils import _accelerator_context
+from torch._utils import _get_device_module
 
 from ._fsdp_api import MixedPrecisionPolicy
 from ._fsdp_common import _cast_fp_tensor, TrainingState
@@ -128,7 +128,7 @@ class FSDPState(_State):
                 self._comm_ctx.all_gather_stream.wait_event(event)
                 self._state_ctx.post_optim_event = None
             else:
-                current_stream = _accelerator_context().current_stream()
+                current_stream = _get_device_module().current_stream()
                 self._comm_ctx.all_gather_copy_in_stream.wait_stream(current_stream)
                 self._comm_ctx.all_gather_stream.wait_stream(current_stream)
             if self._device.type == "cuda" or self._device.type == "xpu":
@@ -292,7 +292,7 @@ class FSDPState(_State):
             if self._state_ctx.is_last_backward:
                 self._comm_ctx.post_forward_order.clear()
                 if self._comm_ctx.reduce_scatter_state is not None:
-                    _accelerator_context().current_stream().wait_event(
+                    _get_device_module().current_stream().wait_event(
                         self._comm_ctx.reduce_scatter_state.event
                     )
                     self._comm_ctx.reduce_scatter_state = None

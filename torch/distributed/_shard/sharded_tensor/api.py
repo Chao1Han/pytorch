@@ -37,7 +37,7 @@ from .utils import (
     build_global_metadata,
     build_metadata_from_local_shards,
 )
-from torch.distributed.utils import _accelerator_context
+from torch._utils import _get_device_module
 
 
 if TYPE_CHECKING:
@@ -584,7 +584,7 @@ class ShardedTensor(ShardedTensorBase):
                 assert isinstance(device, torch.device) and device.index == torch.xpu.current_device(), \
                     '''Only device without device id (e.g. "cpu" or "xpu") is expected for ShardedTensor!'''
 
-        current_device = torch.device(_accelerator_context().current_device())
+        current_device = torch.device(_get_device_module().current_device())
         # returns a copy of ShardedTensor on CUDA current device
         list_shards: List[Shard] = []
         # move all local shards to current device, and change metadata
@@ -656,7 +656,7 @@ class ShardedTensor(ShardedTensorBase):
                 assert isinstance(device, torch.device) and device.index == torch.xpu.current_device(), \
                     '''Only device without device id (e.g. "cpu" or "xpu") is expected for ShardedTensor!'''
 
-        current_device = torch.device(_accelerator_context().current_device())
+        current_device = torch.device(_get_device_module().current_device())
         # returns a copy of ShardedTensor on CUDA current device
         list_shards: List[Shard] = []
         # move all local shards to current device, and change metadata
