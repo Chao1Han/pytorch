@@ -45,36 +45,6 @@ std::map<at::ScalarType, ccl::datatype> xcclDatatypes = {
     {at::kBool, ccl::datatype::uint8},
 };
 
-XCCL_KVS kvs;
-std::mutex kvs_mutex;
-
-XCCL_KVS get_kvs(int rank, c10d::Store& store) {
-  std::lock_guard<std::mutex> lock(kvs_mutex);
-  if (kvs)
-    return kvs;
-  std::string storeKey = "xccl_kvs";
-
-  // Rank 0 broadcast the bootstrap network information to other ranks
-  if (rank == 0) {
-    kvs = ccl::create_main_kvs();
-    ccl::kvs::address_type main_addr = kvs->get_address();
-    auto ccl_kvs_addr =
-        std::vector<uint8_t>(main_addr.begin(), main_addr.end());
-    store.set(storeKey, ccl_kvs_addr);
-  } else {
-    auto ccl_kvs_addr = store.get(storeKey);
-    if (ccl_kvs_addr.size() != ccl::kvs::address_max_size) {
-      throw std::runtime_error("Unexpected ccl kvs addr from the store\n");
-    }
-    ccl::kvs::address_type main_addr;
-    std::copy_n(
-        ccl_kvs_addr.begin(), ccl::kvs::address_max_size, main_addr.begin());
-    kvs = ccl::create_kvs(main_addr);
-  }
-
-  return kvs;
-}
-
 void check_xpu_single_tensor(const at::Tensor& tensor) {
   if (!tensor.is_xpu() || tensor.is_sparse()) {
     C10_THROW_ERROR(ValueError, "Tensors must be XPU and dense");
