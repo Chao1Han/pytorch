@@ -11,7 +11,7 @@ from torch.distributed.fsdp._common_utils import _named_parameters_with_duplicat
 from torch.profiler import record_function
 from torch.utils._pytree import tree_flatten, tree_unflatten
 from torch.utils.hooks import RemovableHandle
-from torch.distributed.utils import _accelerator_context
+from torch._utils import _get_device_module
 
 from ._fsdp_api import CPUOffloadPolicy, MixedPrecisionPolicy, OffloadPolicy
 from ._fsdp_collectives import (
@@ -88,7 +88,7 @@ class FSDPCommContext:
 >>>>>>> 57ee036448d (enable distributed frontend)
             # Use separate streams for implicit prefetching
             return self.all_gather_copy_in_stream, self.all_gather_stream
-        current_stream = _accelerator_context().current_stream()
+        current_stream = _get_device_module().current_stream()
         return current_stream, current_stream
 
 
@@ -373,7 +373,7 @@ class FSDPParamGroup:
             return
         with record_function(self._with_fqn("FSDP::post_backward_reduce")):
             if self.comm_ctx.reduce_scatter_state is not None:
-                _accelerator_context().current_stream().wait_event(
+                _get_device_module().current_stream().wait_event(
                     self.comm_ctx.reduce_scatter_state.event
                 )
                 self.comm_ctx.reduce_scatter_state = None
@@ -402,7 +402,7 @@ class FSDPParamGroup:
 
     def finalize_backward(self):
         if self._post_reduce_event is not None:
-            _accelerator_context().current_stream().wait_event(self._post_reduce_event)
+            _get_device_module().current_stream().wait_event(self._post_reduce_event)
             self._post_reduce_event = None
         for fsdp_param in self.fsdp_params:
             if fsdp_param.grad_offload_event is not None:
