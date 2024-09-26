@@ -13,14 +13,22 @@ from __future__ import annotations
 import copy
 import inspect
 import logging
+<<<<<<< HEAD
+from typing import Any, Mapping, Sequence, TYPE_CHECKING, Union
+=======
 from typing import Any, Iterable, Mapping, Sequence, TYPE_CHECKING, Union
+>>>>>>> upstream/main
 
 import onnxscript
 from onnxscript import evaluator, ir
 from onnxscript.ir import convenience as ir_convenience
 
 import torch
+<<<<<<< HEAD
+from torch.onnx._internal.exporter import _schemas, _tensors, errors
+=======
 from torch.onnx._internal.exporter import _errors, _schemas, _tensors
+>>>>>>> upstream/main
 
 
 if TYPE_CHECKING:
@@ -29,13 +37,21 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+<<<<<<< HEAD
+# TODO(justinchuby): Update ValidAttributeType to ir_convenience.SupportedAttrTypes
+=======
+>>>>>>> upstream/main
 ValidAttributeType = Union[
     ir.TensorProtocol, int, float, bool, str, Sequence[int], Sequence[float], None
 ]
 
+<<<<<<< HEAD
+AllowedArgType = Union[ir.Value, Sequence[ir.Value], ValidAttributeType]
+=======
 AllowedArgType = Union[
     ir.Value, Sequence[Union[ir.Value, ValidAttributeType]], ValidAttributeType
 ]
+>>>>>>> upstream/main
 
 
 # Logic for adapting inputs from general Python or PyTorch inputs to ONNX ir.Value
@@ -182,6 +198,9 @@ def _resolve_parameter_dtypes(
     return type_binding
 
 
+<<<<<<< HEAD
+def _process_python_constants_and_sequences(
+=======
 def _determine_input_dtype(
     param: _schemas.Parameter,
     arg: AllowedArgType,
@@ -273,12 +292,17 @@ def _get_or_create_constant(
 
 
 def _process_python_constants(
+>>>>>>> upstream/main
     signature: _schemas.OpSignature,
     named_inputs: dict[str, AllowedArgType],
     type_binding: Mapping[_schemas.TypeConstraintParam, ir.TypeProtocol],
     constant_farm: dict[
         tuple[
+<<<<<<< HEAD
+            bool | int | float | str | ir.TensorProtocol | tuple[int] | tuple[float],
+=======
             bool | int | float | str | tuple[int] | tuple[float],
+>>>>>>> upstream/main
             ir.DataType,
         ],
         ir.Value,
@@ -297,7 +321,11 @@ def _process_python_constants(
         opset: The Opset to use for creating Constant nodes.
 
     Returns:
+<<<<<<< HEAD
+        None
+=======
         A mapping of parameter names to Python constants converted to constant Nodes.
+>>>>>>> upstream/main
     """
     # 3. Convert Python constants to Constant nodes based on the dtype information;
     #    construct sequences
@@ -316,6 +344,25 @@ def _process_python_constants(
         if isinstance(arg, ir.Value):
             # TODO(justinchuby): Cast the ir.Value here if needed
             continue
+<<<<<<< HEAD
+        if (
+            isinstance(arg, Sequence)
+            and len(arg) > 0
+            and all(isinstance(val, ir.Value) for val in arg)
+        ):
+            # Skip the sequence of ir.Value. This is a variadic input or a Sequence input
+            # NOTE: Variadic operators like Max can be called with mixed ir.Value and Python constants
+            # like `Max(0, ir.Value())`
+            # We need to convert the Python constants to Constant nodes
+            # NOTE: Important to check that arg is not empty because we need to treat it as list[int] or list[float]
+            continue
+            # if param.variadic:
+            #     # FXIME: Handle variadic inputs and sequence inputs differently
+            #     raise NotImplementedError
+            # TODO: Find a way to recursively build constants. Maybe extract the logic out.
+            # FIXME: I am here
+
+=======
 
         if (
             isinstance(arg, Sequence)
@@ -367,10 +414,64 @@ def _process_python_sequences(
     """
     for name, arg in named_inputs.items():
         param = signature.params_map[name]
+>>>>>>> upstream/main
         assert isinstance(
             param, _schemas.Parameter
         ), f"Expected Parameter, got {type(param)}"
 
+<<<<<<< HEAD
+        if param.type_constraint in type_binding:
+            # A known dtype is available
+            dtype = type_binding[param.type_constraint].dtype
+        elif len(param.type_constraint.allowed_types) == 1:
+            # Only one type is allowed
+            dtype = next(iter(param.type_constraint.allowed_types)).dtype
+        else:
+            # No dtype information available. Infer from the Python constant
+            if isinstance(arg, bool):
+                dtype = ir.DataType.BOOL
+            elif isinstance(arg, float):
+                dtype = ir.DataType.FLOAT
+            elif isinstance(arg, int):
+                dtype = ir.DataType.INT64
+            elif isinstance(arg, str):
+                dtype = ir.DataType.STRING
+            elif isinstance(arg, (tuple, list)) and all(
+                isinstance(val, int) for val in arg
+            ):
+                dtype = ir.DataType.INT64
+            elif isinstance(arg, (tuple, list)) and any(
+                isinstance(val, float) for val in arg
+            ):
+                # NOTE: if any float is present, the dtype is float
+                dtype = ir.DataType.FLOAT
+            elif isinstance(arg, (ir.Tensor, ir.TensorProtocol)):
+                dtype = arg.dtype
+            elif arg is None:
+                dtype = ir.DataType.UNDEFINED
+            else:
+                raise TypeError(
+                    f"Constant input '{arg}' of type '{type(arg)}' is not supported"
+                )
+
+        if arg is None:
+            constant_value = None
+        elif not isinstance(arg, (ir.Tensor, ir.TensorProtocol)):
+            # Deduplicate the constants
+            if isinstance(arg, (tuple, list)):
+                # Make the arg hashable
+                arg = tuple(arg)  # noqa: PLW2901
+            constant_value = constant_farm.get((arg, dtype))  # type: ignore[arg-type]
+            if constant_value is None:
+                constant_tensor = ir.tensor(value=arg, dtype=dtype)  # type: ignore[arg-type]
+                constant_value = opset.Constant(value=constant_tensor)
+                constant_farm[(arg, dtype)] = constant_value  # type: ignore[arg-type,index]
+        else:
+            constant_value = opset.Constant(value=arg)
+
+        named_inputs[param.name] = constant_value
+    return named_inputs  # type: ignore[return-value]
+=======
         if not isinstance(arg, (tuple, list)):
             continue
 
@@ -436,6 +537,7 @@ def _process_python_sequences(
             named_inputs[name] = opset.Concat(*new_args)
             continue
     return named_inputs
+>>>>>>> upstream/main
 
 
 def _construct_node(
@@ -465,12 +567,15 @@ def _construct_node(
         else:
             inputs.append(value)
 
+<<<<<<< HEAD
+=======
     # If final inputs are None, strip them from the node inputs
     for input in reversed(inputs):
         if input is not None:
             break
         inputs.pop()
 
+>>>>>>> upstream/main
     # Construct and filter out None attributes
     attributes = [
         attr
@@ -513,6 +618,13 @@ class OpRecorder(evaluator.Evaluator):
         """
         type_binding = _resolve_parameter_dtypes(op_signature, named_inputs)
         try:
+<<<<<<< HEAD
+            converted_named_inputs = _process_python_constants_and_sequences(
+                op_signature, named_inputs, type_binding, self.constant_farm, self.opset
+            )
+        except Exception as e:
+            raise errors.GraphConstructionError(
+=======
             converted_named_inputs = _process_python_constants(
                 op_signature, named_inputs, type_binding, self.constant_farm, self.opset
             )
@@ -526,6 +638,7 @@ class OpRecorder(evaluator.Evaluator):
 
         except Exception as e:
             raise _errors.GraphConstructionError(
+>>>>>>> upstream/main
                 f"Error processing Python constants for operator '{op_signature.domain}::{op_signature.name}'. "
                 f"named_inputs={named_inputs}, named_attrs={named_attrs}, opset={self.opset}, op_signature={op_signature}."
             ) from e
@@ -537,7 +650,11 @@ class OpRecorder(evaluator.Evaluator):
                 )
             )
         except Exception as e:
+<<<<<<< HEAD
+            raise errors.GraphConstructionError(
+=======
             raise _errors.GraphConstructionError(
+>>>>>>> upstream/main
                 f"Error constructing node for operator '{op_signature.domain}::{op_signature.name}'. "
                 f"named_inputs={named_inputs}, converted_named_inputs={converted_named_inputs}, "
                 f"named_attrs={named_attrs}, opset={self.opset}, op_signature={op_signature}."
@@ -581,7 +698,11 @@ class OpRecorder(evaluator.Evaluator):
                 return outputs[0]
             return outputs
         except Exception as e:
+<<<<<<< HEAD
+            raise errors.GraphConstructionError(
+=======
             raise _errors.GraphConstructionError(
+>>>>>>> upstream/main
                 f"Error calling operator '{schema.name}' with args {args} and kwargs {kwargs}."
             ) from e
 
@@ -647,11 +768,14 @@ class OpRecorder(evaluator.Evaluator):
             # call because it will filter out the unexpected kwargs for us.
             if function.traceable:
                 # Trace the function call instead of adding the function as a node
+<<<<<<< HEAD
+=======
                 # Turn the ir.Attr objects into Python constants first
                 named_attrs = {
                     name: attr.value if isinstance(attr, ir.Attr) else attr
                     for name, attr in named_attrs.items()
                 }
+>>>>>>> upstream/main
                 return function.function(**named_inputs, **named_attrs)
 
             outputs = self._call_op(op_signature, named_inputs, named_attrs)
@@ -666,7 +790,11 @@ class OpRecorder(evaluator.Evaluator):
                 _, lineno = inspect.getsourcelines(function.function)
             except Exception:
                 source_file = lineno = None
+<<<<<<< HEAD
+            raise errors.GraphConstructionError(
+=======
             raise _errors.GraphConstructionError(
+>>>>>>> upstream/main
                 f"Error calling function '{function.name}' with args {args} and kwargs {kwargs}."
                 + f" The function is defined at '{source_file}:{lineno}'."
                 if source_file

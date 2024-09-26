@@ -3,7 +3,11 @@
 
 import logging
 import math
+<<<<<<< HEAD
+from typing import Any, List, Optional, Tuple
+=======
 from typing import Any, List, Optional, Sequence, Tuple
+>>>>>>> upstream/main
 
 import sympy
 
@@ -80,6 +84,8 @@ def maybe_realize(args: List[Optional[IRNode]]):
     return tree_map(lambda x: realize_inputs(x) if x is not None else None, args)
 
 
+<<<<<<< HEAD
+=======
 def get_float32_precision():
     if torch.get_float32_matmul_precision() == "highest" or torch.version.hip:
         return "'ieee'"
@@ -87,6 +93,7 @@ def get_float32_precision():
         return "'tf32'"
 
 
+>>>>>>> upstream/main
 def build_subgraph_buffer(
     args: List[TensorBox],
     subgraph: Subgraph,
@@ -269,7 +276,11 @@ compute_flex_attention = r"""
         q = tl.load(Q_block_ptr)
     else:
         # boundary check is not free, so we only do it when necessary.
+<<<<<<< HEAD
+        q = tl.load(Q_block_ptr, boundary_check=(0,))
+=======
         q = tl.load(Q_block_ptr, boundary_check=(0,), padding_option = "zero")
+>>>>>>> upstream/main
 
     # ~~~~~~~~~~~~~~ normal blocks ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # We don't know anything "special" about these blocks, so we need to apply
@@ -277,7 +288,11 @@ compute_flex_attention = r"""
     kv_indices = KV_IDX + sparse_kv_idx_offset
     kv_start = tl.load(kv_indices) * SPARSE_KV_BLOCK_SIZE # first kv block we're loading
     kv_num_blocks = tl.load(KV_NUM_BLKS + sparse_kv_num_blks_offset)
+<<<<<<< HEAD
+    block_n_end = tl.minimum(kv_num_blocks * SPARSE_KV_MULTIPLE, tl.maximum(KV_LEN // BLOCK_N, 1))
+=======
     block_n_end = tl.minimum(kv_num_blocks * SPARSE_KV_MULTIPLE, tl.maximum(tl.cdiv(KV_LEN, BLOCK_N), 1))
+>>>>>>> upstream/main
 
     K_block_ptr = tl.make_block_ptr(
         base=K,
@@ -301,7 +316,11 @@ compute_flex_attention = r"""
         {{gen_argdefs()}},
         q, K_block_ptr, V_block_ptr, Q_LEN, KV_LEN,
         acc, l_i, m_i,
+<<<<<<< HEAD
+        off_z, off_hq, offs_m[:, None], offs_n[None, :],
+=======
         off_zq, off_hq, offs_m[:, None], offs_n[None, :],
+>>>>>>> upstream/main
         kv_indices, kv_num_blocks,
         0, block_n_end,
         MATMUL_PRECISION,
@@ -316,7 +335,11 @@ compute_flex_attention = r"""
         kv_indices = FULL_KV_IDX + sparse_kv_idx_offset
         kv_start = tl.load(kv_indices) * SPARSE_KV_BLOCK_SIZE # first kv block we're loading
         kv_num_blocks = tl.load(FULL_KV_NUM_BLKS + sparse_kv_num_blks_offset)
+<<<<<<< HEAD
+        block_n_end = tl.minimum(kv_num_blocks * SPARSE_KV_MULTIPLE, tl.maximum(KV_LEN // BLOCK_N, 1))
+=======
         block_n_end = tl.minimum(kv_num_blocks * SPARSE_KV_MULTIPLE, tl.maximum(tl.cdiv(KV_LEN, BLOCK_N), 1))
+>>>>>>> upstream/main
 
         K_block_ptr = tl.make_block_ptr(
             base=K,
@@ -340,7 +363,11 @@ compute_flex_attention = r"""
             {{gen_argdefs()}},
             q, K_block_ptr, V_block_ptr, Q_LEN, KV_LEN,
             acc, l_i, m_i,
+<<<<<<< HEAD
+            off_z, off_hq, offs_m[:, None], offs_n[None, :],
+=======
             off_zq, off_hq, offs_m[:, None], offs_n[None, :],
+>>>>>>> upstream/main
             kv_indices, kv_num_blocks,
             0, block_n_end,
             MATMUL_PRECISION,
@@ -352,6 +379,11 @@ compute_flex_attention = r"""
     # Li will be the sum(e^(-inf)) == 0.0 for masked out rows, mi will be -inf.
     # We set Li to 1.0 which will result in lse/out = 0.0 | after the log(li) + mi(0.0) step
     l_i = tl.where(l_i == 0.0, 1, l_i)
+<<<<<<< HEAD
+    masked_out_rows = (m_i == float("-inf"))
+    m_i = tl.where(masked_out_rows, 0, m_i)
+=======
+>>>>>>> upstream/main
 
     acc = acc / l_i[:, None]
     idx_zq = tl.program_id(1) // HQ
@@ -465,9 +497,15 @@ def forward_block_mn(
     if IS_DIVISIBLE:
         k = tl.load(K_block_ptr)
     else:
+<<<<<<< HEAD
+        k = tl.load(K_block_ptr, boundary_check=(1,))
+    # -- compute qk ---
+    qk = tl.dot(q, k) # TODO: use cuda matmul when q_len <= 2.
+=======
         k = tl.load(K_block_ptr, boundary_check=(1,), padding_option = "zero")
     # -- compute qk ---
     qk = tl.dot(q, k, input_precision=FLOAT32_PRECISION) # TODO: use cuda matmul when q_len <= 2.
+>>>>>>> upstream/main
     if not PRESCALE_QK:
         qk *= SM_SCALE
     # ~~~~~~~~~~~~~~~~~~~ Apply score modification  ~~~~~~~~~~~~~~~~~~~
@@ -475,11 +513,16 @@ def forward_block_mn(
         # If this is the last block of a non divisible seqlen, we still need to load [BLOCK_M, BLOCK_N] elements,
         # which is larger than the actual number of elements. To avoid access memory out of bound,
         # we need to mask out the elements that are out of Q_LEN & KV_LEN.
+<<<<<<< HEAD
+        offs_m = offs_m % Q_LEN
+        offs_n = offs_n % KV_LEN
+=======
         m = offs_m % Q_LEN
         n = offs_n % KV_LEN
     else:
         m = offs_m
         n = offs_n
+>>>>>>> upstream/main
 
     {{ modification(
         subgraph_number=0,
@@ -487,8 +530,13 @@ def forward_block_mn(
         score="qk",
         b="off_z",
         h="off_h",
+<<<<<<< HEAD
+        m="offs_m",
+        n="offs_n",
+=======
         m="m",
         n="n",
+>>>>>>> upstream/main
         out="qk"
     ) | indent_except_first(1) }}
 
@@ -503,8 +551,13 @@ def forward_block_mn(
             score="qk",
             b="off_z",
             h="off_h",
+<<<<<<< HEAD
+            m="offs_m",
+            n="offs_n",
+=======
             m="m",
             n="n",
+>>>>>>> upstream/main
         ) | indent_except_first(2) }}
 
         if CHECK_BLOCK_BOUNDARY:
@@ -538,8 +591,13 @@ def forward_block_mn(
     if IS_DIVISIBLE:
         v = tl.load(V_block_ptr)
     else:
+<<<<<<< HEAD
+        v = tl.load(V_block_ptr, boundary_check=(0,))
+    acc = tl.dot(p.to(MATMUL_PRECISION), v, acc)
+=======
         v = tl.load(V_block_ptr, boundary_check=(0,), padding_option = "zero")
     acc = tl.dot(p.to(MATMUL_PRECISION), v, acc, input_precision=FLOAT32_PRECISION)
+>>>>>>> upstream/main
 
     # -- update m_i
     m_i = m_ij
@@ -727,7 +785,10 @@ def flex_attention(
         mask_graph_placeholder_inps + list(mask_mod_other_buffers), mask_graph
     )
     kernel_options = dict(kernel_options)
+<<<<<<< HEAD
+=======
     kernel_options.setdefault("FLOAT32_PRECISION", get_float32_precision())
+>>>>>>> upstream/main
     if _use_flex_decoding(query, kernel_options):
         return create_flex_decoding_kernel(
             query,
@@ -769,6 +830,8 @@ def flex_attention(
             full_q_indices,
         ]
     )
+<<<<<<< HEAD
+=======
 
     Bq, Hq, seq_len_q, qk_head_dim = query.get_size()
     Bkv, Hkv, seq_len_kv, v_head_dim = value.get_size()
@@ -792,12 +855,31 @@ def flex_attention(
     stride_order = get_stride_order(query.get_stride())
     fill_order = stride_order2fill_order(stride_order)
     out_strides = construct_strides(out_size, fill_order)
+>>>>>>> upstream/main
 
+    Bq, Hq, seq_len_q, qk_head_dim = query.get_size()
+    Bkv, Hkv, seq_len_kv, v_head_dim = value.get_size()
+    assert Bq == Bkv, "Batch dimension must match"
+    B = Bq
+
+    if seq_len_q % 128 != 0 or seq_len_kv % 128 != 0:
+        kernel_options.setdefault("IS_DIVISIBLE", False)
+    else:
+        kernel_options.setdefault("IS_DIVISIBLE", True)
+
+    # Reuse query strides for output layout despite different last dimension.
+    # This works because only the last dim differs and we check it is contiguous.
+    q_strides = query.get_stride()
+    assert q_strides[-1] == 1, "Query must be contiguous in the last dimension"
     layout = FixedLayout(
         query.get_device(),
         query.get_dtype(),
         [B, Hq, seq_len_q, v_head_dim],
+<<<<<<< HEAD
+        query.get_stride(),
+=======
         stride=out_strides,
+>>>>>>> upstream/main
     )
     # see NOTE:[TritonTemplates with multiple outputs]
     logsumexp_shape = [B, Hq, seq_len_q]
@@ -1011,7 +1093,11 @@ flex_attention_backward_template = TritonTemplate(
     SPARSE_Z = {{size("KV_NUM_BLKS", 0)}}
     SPARSE_HQ = {{size("KV_NUM_BLKS", 1)}}
 
+<<<<<<< HEAD
+    sparse_idx_z = off_z % SPARSE_Z
+=======
     sparse_idx_z = off_zq % SPARSE_Z
+>>>>>>> upstream/main
 
     k_adj = (stride_kh * off_hkv + stride_kz * off_zkv).to(tl.int64)
     v_adj = (stride_vh * off_hkv + stride_vz * off_zkv).to(tl.int64)
@@ -1082,7 +1168,10 @@ flex_attention_backward_template = TritonTemplate(
         else:
             Di = tl.load(DELTA2 + offs_m2, mask=offs_m2 < Q_LEN)
             lse = tl.load(LSE2 + offs_m2, mask=offs_m2 < Q_LEN)
+<<<<<<< HEAD
+=======
         lse = tl.where(lse == -float("inf"), 0.0, lse)
+>>>>>>> upstream/main
         lse = lse[:, None]
 
         # ~~~~~~~~~~~ fully unmasked blocks ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1259,7 +1348,11 @@ def bwd_dq_inner(
     # BLOCK_M2 must be a multiple of BLOCK_N2, otherwise the code wouldn't work.
     tl.static_assert(BLOCK_M2 % BLOCK_N2 == 0)
 
+<<<<<<< HEAD
+    hi = tl.minimum(sparse_kv_num_blocks * SPARSE_KV_MULTIPLE, tl.maximum(KV_LEN // BLOCK_N2, 1))
+=======
     hi = tl.minimum(sparse_kv_num_blocks * SPARSE_KV_MULTIPLE, tl.maximum(tl.cdiv(KV_LEN, BLOCK_N2), 1))
+>>>>>>> upstream/main
     if not IS_DIVISIBLE:
         if hi >= 1:
             for start_n in range(0, hi - 1):
@@ -1335,7 +1428,11 @@ def bwd_dq_block_mn(
         kT = tl.load(kT_ptrs)
     else:
         kT = tl.load(kT_ptrs, mask=offs_n2[None, :] < KV_LEN)
+<<<<<<< HEAD
+    qk = tl.dot(q, kT)
+=======
     qk = tl.dot(q, kT, input_precision=FLOAT32_PRECISION)
+>>>>>>> upstream/main
     if not PRESCALE_QK:
         qk *= SM_SCALE
     # ~~~~~~~~~~~~~~~~~~~ Apply score modification  ~~~~~~~~~~~~~~~~~~~
@@ -1385,7 +1482,11 @@ def bwd_dq_block_mn(
         vT = tl.load(vT_ptrs)
     else:
         vT = tl.load(vT_ptrs, mask=offs_n2[None, :] < KV_LEN)
+<<<<<<< HEAD
+    dp = tl.dot(do, vT)
+=======
     dp = tl.dot(do, vT, input_precision=FLOAT32_PRECISION)
+>>>>>>> upstream/main
     ds = p * (dp - Di[:, None])
     # ~~~~~~~~~~~~~~~~~~~ Apply joint modification  ~~~~~~~~~~~~~~~~~~~
     {{ modification(
@@ -1411,7 +1512,11 @@ def bwd_dq_block_mn(
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     ds = ds.to(MATMUL_PRECISION)
     # Compute dQ.
+<<<<<<< HEAD
+    dq += tl.dot(ds, tl.trans(kT))
+=======
     dq += tl.dot(ds, tl.trans(kT), input_precision=FLOAT32_PRECISION)
+>>>>>>> upstream/main
 
     return dq
 
@@ -1440,7 +1545,11 @@ def bwd_dkdv_inner(
     do_ptrs = DO + offs_m1[:, None] * stride_dom + offs_v[None, :] * stride_dod
     # BLOCK_N1 must be a multiple of BLOCK_M1, otherwise the code wouldn't work.
     tl.static_assert(BLOCK_N1 % BLOCK_M1 == 0)
+<<<<<<< HEAD
+    hi = tl.minimum(sparse_q_num_blocks * SPARSE_Q_MULTIPLE, tl.maximum(Q_LEN // BLOCK_M1, 1))
+=======
     hi = tl.minimum(sparse_q_num_blocks * SPARSE_Q_MULTIPLE, tl.maximum(tl.cdiv(Q_LEN, BLOCK_M1), 1))
+>>>>>>> upstream/main
 
     if not IS_DIVISIBLE:
         if hi >= 1:
@@ -1518,8 +1627,12 @@ def bwd_dkdv_block_mn(
     else:
         qT = tl.load(qT_ptrs, mask=offs_m1[None, :] < Q_LEN)
         lse = tl.load(LSE + offs_m1, mask=offs_m1 < Q_LEN)
+<<<<<<< HEAD
+    qkT = tl.dot(k, qT)
+=======
     lse = tl.where(lse == -float("inf"), 0.0, lse)
     qkT = tl.dot(k, qT, input_precision=FLOAT32_PRECISION)
+>>>>>>> upstream/main
     if not PRESCALE_QK:
         qkT *= SM_SCALE
     # ~~~~~~~~~~~~~~~~~~~ Apply score modification  ~~~~~~~~~~~~~~~~~~~
@@ -1569,13 +1682,21 @@ def bwd_dkdv_block_mn(
         do = tl.load(do_ptrs, mask=offs_m1[:, None] < Q_LEN)
     # Compute dV.
     ppT = pT
+<<<<<<< HEAD
+    dv += tl.dot(ppT.to(MATMUL_PRECISION), do)
+=======
     dv += tl.dot(ppT.to(MATMUL_PRECISION), do, input_precision=FLOAT32_PRECISION)
+>>>>>>> upstream/main
     if IS_DIVISIBLE:
         Di = tl.load(DELTA + offs_m1)
     else:
         Di = tl.load(DELTA + offs_m1, mask=offs_m1 < Q_LEN)
     # Compute dP and dS.
+<<<<<<< HEAD
+    dpT = tl.dot(v, tl.trans(do))
+=======
     dpT = tl.dot(v, tl.trans(do), input_precision=FLOAT32_PRECISION)
+>>>>>>> upstream/main
     dsT = pT * (dpT - Di[None, :])
     # ~~~~~~~~~~~~~~~~~~~ Apply joint modification  ~~~~~~~~~~~~~~~~~~~
     {{ modification(
@@ -1598,7 +1719,11 @@ def bwd_dkdv_block_mn(
         # (grads) apply mask for partially unmasked block
         dsT = tl.where(mask_mod_output, dsT, 0.0)
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<<<<<<< HEAD
+    dk += tl.dot(dsT.to(MATMUL_PRECISION), tl.trans(qT))
+=======
     dk += tl.dot(dsT.to(MATMUL_PRECISION), tl.trans(qT), input_precision=FLOAT32_PRECISION)
+>>>>>>> upstream/main
 
     return dk, dv
  """
@@ -1670,11 +1795,23 @@ def flex_attention_backward(*args, **kwargs):
             full_q_indices,
         ]
     )
+<<<<<<< HEAD
+
+    if _use_flex_decoding(query, kernel_options):
+        raise NotImplementedError("Flex decoding backward pass is not implemented. ")
+=======
+>>>>>>> upstream/main
 
     device = query.get_device()
     dtype = query.get_dtype()
     Bq, Hq, seq_len_q, qk_head_dim = query.get_size()
     Bkv, Hkv, seq_len_kv, v_head_dim = value.get_size()
+<<<<<<< HEAD
+    assert Bq == Bkv, "Batch dimension must match"
+    B = Bq
+
+    kernel_options = dict(kernel_options)
+=======
 
     assert V.graph.sizevars.evaluate_expr(
         sympy.Eq(Bq, Bkv) | sympy.Eq(Bkv, 1)
@@ -1683,6 +1820,7 @@ def flex_attention_backward(*args, **kwargs):
 
     kernel_options = dict(kernel_options)
     kernel_options.setdefault("FLOAT32_PRECISION", get_float32_precision())
+>>>>>>> upstream/main
     if seq_len_q % 128 != 0 or seq_len_kv % 128 != 0:
         kernel_options.setdefault("IS_DIVISIBLE", False)
     else:

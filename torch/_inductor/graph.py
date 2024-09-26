@@ -63,7 +63,7 @@ from .codegen.common import (
     init_backend_registration,
 )
 from .exc import (
-    CppWrapperCodeGenError,
+    CppWrapperCodegenError,
     LoweringException,
     MissingOperatorWithDecomp,
     MissingOperatorWithoutDecomp,
@@ -104,7 +104,7 @@ from .virtualized import NullHandler, V
 
 if TYPE_CHECKING:
     from torch._higher_order_ops.effects import _EffectType
-    from .codegen.wrapper import WrapperCodeGen
+    from .codegen.wrapper import PythonWrapperCodegen
 
 from torch._inductor.codecache import output_code_log
 
@@ -388,7 +388,7 @@ class GraphLowering(torch.fx.Interpreter):
         self.never_reuse_buffers: OrderedSet[str] = OrderedSet()
         self.inplaced_to_remove: OrderedSet[str] = OrderedSet()
         self.device_ops: DeviceOpOverrides = None  # type: ignore[assignment]
-        self.wrapper_code: WrapperCodeGen = None  # type: ignore[assignment]
+        self.wrapper_code: PythonWrapperCodegen = None  # type: ignore[assignment]
         # See `ProxyExecutor Design Note` in ir.py for more details
         self.extern_kernel_nodes: List[ir.ExternKernelNode] = []
 
@@ -1237,6 +1237,12 @@ class GraphLowering(torch.fx.Interpreter):
         If fx_node mutates any of new_args/new_kwargs, and they are different from
         old_args/old_kwargs, then we need to update the original tensor.
         """
+<<<<<<< HEAD
+        assert isinstance(fx_node.target, torch._ops.OpOverload)
+        assert len(old_args) == len(new_args)
+        assert len(old_kwargs) == len(new_kwargs)
+
+=======
         assert len(old_args) == len(new_args)
         assert len(old_kwargs) == len(new_kwargs)
 
@@ -1261,6 +1267,7 @@ class GraphLowering(torch.fx.Interpreter):
 
         assert isinstance(fx_node.target, torch._ops.OpOverload)
 
+>>>>>>> upstream/main
         def maybe_propagate(
             schema_arg: torch._C.Argument, old_arg: ir.IRNode, new_arg: ir.IRNode
         ) -> None:
@@ -1322,6 +1329,8 @@ class GraphLowering(torch.fx.Interpreter):
                 # if they do, and if the target is mutable, then we need to
                 # write the new values back into the original inputs.
                 self.propagate_mutation(n, old_args, old_kwargs, args, kwargs)  # type: ignore[possibly-undefined]
+<<<<<<< HEAD
+=======
             elif (
                 n.op == "call_function"
                 and n.target is torch.ops.higher_order.triton_kernel_wrapper_mutation
@@ -1341,6 +1350,7 @@ class GraphLowering(torch.fx.Interpreter):
                     raise RuntimeError(
                         f"Unknown triton_kernel_default_layout_constraint: {config.triton_kernel_default_layout_constraint}"
                     )
+>>>>>>> upstream/main
             elif is_magic_method(n.target):
                 # TODO: this is sus, it probably should be handled in the
                 # lowerings themselves similarly to sym_size/sym-stride
@@ -1661,10 +1671,10 @@ class GraphLowering(torch.fx.Interpreter):
 
     def validate_can_generate_cpp_wrapper(self) -> None:
         if config.disable_cpp_codegen:
-            raise CppWrapperCodeGenError("C++ codegen is disabled")
+            raise CppWrapperCodegenError("C++ codegen is disabled")
 
         if sys.platform not in ["linux", "darwin", "win32"]:
-            raise CppWrapperCodeGenError(f"Unsupported platform {sys.platform}")
+            raise CppWrapperCodegenError(f"Unsupported platform {sys.platform}")
 
         for value in self.graph_inputs.values():
             dtype = None
@@ -1676,7 +1686,7 @@ class GraphLowering(torch.fx.Interpreter):
                 dtype = may_get_constant_buffer_dtype(value)
 
             if not supported_dtype_of_cpp_wrapper(dtype, self.device_type):
-                raise CppWrapperCodeGenError(f"Unsupported input dtype {dtype}")
+                raise CppWrapperCodegenError(f"Unsupported input dtype {dtype}")
 
     def init_wrapper_code(self) -> None:
         device_types = self.device_types.copy()

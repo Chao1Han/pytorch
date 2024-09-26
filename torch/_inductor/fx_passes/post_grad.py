@@ -855,6 +855,8 @@ def decompose_auto_functionalized(graph):
             return (triton_kernel_wrapper_functional_dense(*args, **kwargs),)
 
         match.replace_by_example(decomp, flat_args, run_functional_passes=False)
+<<<<<<< HEAD
+=======
 
     @register_graph_pattern(
         CallFunctionVarArgs(torch.ops.higher_order.auto_functionalized_v2),
@@ -879,6 +881,7 @@ def decompose_auto_functionalized(graph):
             return auto_functionalized_v2_dense(*args, only_clone_these_bases, **kwargs)
 
         match.replace_by_example(decomp, flat_args, run_functional_passes=False)
+>>>>>>> upstream/main
 
     graph_pass.apply(graph)
 
@@ -886,6 +889,11 @@ def decompose_auto_functionalized(graph):
         op="call_function", target=torch.ops.higher_order.auto_functionalized
     ):
         raise AssertionError("auto_functionalized was not removed")
+    for node in graph.find_nodes(
+        op="call_function",
+        target=torch.ops.higher_order.triton_kernel_wrapper_functional,
+    ):
+        raise AssertionError("triton_kernel_wrapper_functional was not removed")
 
     for node in graph.find_nodes(
         op="call_function", target=torch.ops.higher_order.auto_functionalized_v2

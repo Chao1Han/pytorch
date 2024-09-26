@@ -33,6 +33,7 @@ from torch._dynamo.utils import (
     lazy_format_graph_code,
 )
 from torch._functorch import config as functorch_config
+from torch._functorch._aot_autograd.subclass_utils import unwrap_tensor_subclasses
 from torch._functorch.aot_autograd import aot_export_module, make_boxed_func
 from torch._inductor.codecache import (
     _StrideExprStr,
@@ -56,6 +57,7 @@ from torch._inductor.utils import (
     InputType,
     is_gpu,
     should_assume_input_aligned,
+    should_use_remote_fx_graph_cache,
     tensor_is_aligned,
 )
 from torch._logging import trace_structured
@@ -63,7 +65,10 @@ from torch._ops import OpOverload
 from torch.fx.experimental.symbolic_shapes import free_unbacked_symbols, SymExprPrinter
 from torch.fx.passes.fake_tensor_prop import FakeTensorProp
 from torch.monitor import _WaitCounter
+<<<<<<< HEAD
+=======
 from torch.utils._ordered_set import OrderedSet
+>>>>>>> upstream/main
 
 from .._dynamo.backends.common import aot_autograd
 from ..fx._lazy_graph_module import _use_lazy_graph_module  # type: ignore[attr-defined]
@@ -384,7 +389,11 @@ def maybe_disable_comprehensive_padding(example_inputs: List[torch.Tensor]):
         is_gpu(t.device.type) for t in example_inputs if isinstance(t, torch.Tensor)
     )
 
+<<<<<<< HEAD
+    if config.comprehensive_padding and not has_gpu:
+=======
     if config.disable_padding_cpu and config.comprehensive_padding and not has_gpu:
+>>>>>>> upstream/main
         perf_hint_log.info("Skip comprehensive padding on CPU")
         return config.patch(comprehensive_padding=False)
     else:
@@ -421,6 +430,7 @@ def fake_tensor_prop(
     return fake_mode
 
 
+<<<<<<< HEAD
 def should_use_remote_fx_graph_cache():
     if config.fx_graph_remote_cache is not None:
         return config.fx_graph_remote_cache
@@ -442,6 +452,8 @@ def should_use_remote_fx_graph_cache():
     return REMOTE_CACHE_VERSION >= torch._utils_internal.justknobs_getval_int(jk_name)
 
 
+=======
+>>>>>>> upstream/main
 # pass config dict back to user
 def get_patched_config_dict(config_patches=None) -> Dict[str, Any]:
     with config.patch(config_patches):
@@ -1206,14 +1218,40 @@ def fw_compiler_freezing(
     )
 
     static_input_idxs = list(range(num_fixed))
+    wrapper_new_args_unwrapped_indices: List[int] = []
     # constant params will be real tensors, not fake
     tracing_context = torch._guards.TracingContext.try_get()
+    unwrapped_args_offsets = [0]
+    max_offset_idx = 0
     if tracing_context is not None:
-        params_flat = tracing_context.params_flat
-        assert params_flat is not None
-        for i in range(len(params_flat)):
+        assert tracing_context.params_flat_unwrap_subclasses is not None
+        params_flat_unwrap = [
+            r() for r in tracing_context.params_flat_unwrap_subclasses
+        ]
+        assert params_flat_unwrap is not None
+        max_offset_idx = max(0, len(params_flat_unwrap) - 1)
+        assert params_flat_unwrap is not None
+        preserved_indices_params_flat = set()
+        unwrapped_idxs = tracing_context.params_unwrapped_to_flat_index
+        assert unwrapped_idxs is not None
+        current_offset = 0
+        if len(params_flat_unwrap) > 0:
+            unwrapped_args_offsets = []
+
+        for i in range(len(params_flat_unwrap)):
             if i not in preserved_arg_indices:
-                params_flat[i] = None
+                params_flat_unwrap[i] = None
+                if i > 0 and unwrapped_idxs[i] == unwrapped_idxs[i - 1]:
+                    current_offset += 1
+            else:
+                preserved_indices_params_flat.add(unwrapped_idxs[i])
+            unwrapped_args_offsets.append(current_offset)
+
+        # Deallocate wrapped params, if all subelements were deallocated
+        assert tracing_context.params_flat is not None
+        for i in range(len(tracing_context.params_flat)):
+            if i not in preserved_indices_params_flat:
+                tracing_context.params_flat[i] = None
 
         if tracing_context.fw_metadata:
             static_input_idxs += tracing_context.fw_metadata.static_input_indices
@@ -1237,7 +1275,12 @@ def fw_compiler_freezing(
         return optimized_function
 
     def wrapper(args):
-        args_new = [args[i] for i in preserved_arg_indices]
+        args_unwrapped = unwrap_tensor_subclasses(args, is_joint_structure=False)
+        args_new = [
+            args_unwrapped[i - unwrapped_args_offsets[min(i, max_offset_idx)]]
+            for i in preserved_arg_indices
+        ]
+        args_unwrapped.clear()
         args.clear()
         return optimized_function(args_new)
 

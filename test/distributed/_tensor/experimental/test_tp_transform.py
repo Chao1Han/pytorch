@@ -3,7 +3,9 @@ from collections import defaultdict
 from typing import Dict
 
 import torch
-from torch.distributed._tensor.experimental._tp_transform import (
+import intel_extension_for_pytorch
+import oneccl_bindings_for_pytorch
+from torch.distributed._tensor.experimental.tp_transform import (
     tensor_parallel_transformation,
 )
 from torch.distributed.tensor.parallel.style import (

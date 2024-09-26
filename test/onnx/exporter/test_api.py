@@ -6,7 +6,11 @@ from __future__ import annotations
 import os
 
 import torch
+<<<<<<< HEAD
 from torch.onnx._internal.exporter import testing as onnx_testing
+=======
+from torch.onnx._internal.exporter import _testing as onnx_testing
+>>>>>>> upstream/main
 from torch.testing._internal import common_utils
 
 
@@ -72,6 +76,8 @@ class TestExportAPIDynamo(common_utils.TestCase):
             },
         )
 
+<<<<<<< HEAD
+=======
     def test_dynamic_axes_supports_output_names(self):
         self.assert_export(
             SampleModelForDynamicShapes(),
@@ -94,6 +100,7 @@ class TestExportAPIDynamo(common_utils.TestCase):
         assert onnx_program is not None
         onnx_testing.assert_onnx_program(onnx_program)
 
+>>>>>>> upstream/main
     def test_saved_f_exists_after_export(self):
         with common_utils.TemporaryFileName(suffix=".onnx") as path:
             _ = torch.onnx.export(
@@ -148,6 +155,8 @@ class TestExportAPIDynamo(common_utils.TestCase):
             },
         )
 
+<<<<<<< HEAD
+=======
     def test_auto_convert_all_axes_to_dynamic_shapes_with_dynamo_export(self):
         os.environ["TORCH_ONNX_USE_EXPERIMENTAL_LOGIC"] = "1"
         assert os.environ.get("TORCH_ONNX_USE_EXPERIMENTAL_LOGIC") == "1"
@@ -205,6 +214,7 @@ class TestExportAPIDynamo(common_utils.TestCase):
         input = torch.randn(2)
         self.assert_export(Model(), (input))
 
+>>>>>>> upstream/main
 
 if __name__ == "__main__":
     common_utils.run_tests()

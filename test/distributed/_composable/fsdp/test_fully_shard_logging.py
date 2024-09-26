@@ -3,6 +3,9 @@ import functools
 import os
 import unittest.mock
 
+import torch
+import intel_extension_for_pytorch
+import oneccl_bindings_for_pytorch
 import torch.distributed as dist
 from torch._dynamo.test_case import run_tests
 from torch.testing._internal.common_distributed import skip_if_lt_x_gpu

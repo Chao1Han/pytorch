@@ -5,6 +5,8 @@ from typing import List
 from unittest.mock import patch
 
 import torch
+import intel_extension_for_pytorch
+import oneccl_bindings_for_pytorch
 import torch.nn as nn
 from torch import distributed as dist
 from torch.distributed.fsdp import BackwardPrefetch, FullyShardedDataParallel as FSDP
@@ -87,8 +89,8 @@ class TestBackwardPrefetch(FSDPTest):
             {nn.TransformerEncoderLayer, nn.TransformerDecoderLayer}
         )
         model = FSDP(
-            nn.Transformer(d_model=1024, nhead=8, device="cuda"),
-            device_id=torch.cuda.current_device(),
+            nn.Transformer(d_model=1024, nhead=8, device="xpu"),
+            device_id=torch.xpu.current_device(),
             auto_wrap_policy=policy,
             use_orig_params=True,
             backward_prefetch=backward_prefetch,
@@ -97,8 +99,8 @@ class TestBackwardPrefetch(FSDPTest):
 
         # prepare input
         torch.manual_seed(rank + 1)
-        src = torch.randn((10, 1, 1024), device="cuda")
-        tgt = torch.randn((20, 1, 1024), device="cuda")
+        src = torch.randn((10, 1, 1024), device="xpu")
+        tgt = torch.randn((20, 1, 1024), device="xpu")
 
         # monkey patch
         all_handle_fqns: List[List[str]] = []

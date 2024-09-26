@@ -88,6 +88,12 @@ class SymbolicTensor(ir.Value):
     def __le__(self, other):
         return self._opset.LessOrEqual(self, other)
 
+<<<<<<< HEAD
+    def __eq__(self, other):
+        return self._opset.Equal(self, other)
+
+=======
+>>>>>>> upstream/main
     def __ge__(self, other):
         return self._opset.GreaterOrEqual(self, other)
 

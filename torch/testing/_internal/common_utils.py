@@ -103,10 +103,6 @@ try:
 except ImportError:
     has_pytest = False
 
-
-MI300_ARCH = ("gfx940", "gfx941", "gfx942")
-
-
 def freeze_rng_state(*args, **kwargs):
     return torch.testing._utils.freeze_rng_state(*args, **kwargs)
 
@@ -1507,10 +1503,6 @@ def xfailIfTorchDynamo(func):
     return unittest.expectedFailure(func) if TEST_WITH_TORCHDYNAMO else func
 
 
-def xfailIfLinux(func):
-    return unittest.expectedFailure(func) if IS_LINUX and not TEST_WITH_ROCM else func
-
-
 def skipIfTorchDynamo(msg="test doesn't currently work with dynamo"):
     """
     Usage:
@@ -1766,19 +1758,6 @@ def runOnRocm(fn):
         else:
             raise unittest.SkipTest("test currently only works on the ROCm stack")
     return wrapper
-
-def runOnRocmArch(arch: Tuple[str, ...]):
-    def dec_fn(fn):
-        @wraps(fn)
-        def wrap_fn(self, *args, **kwargs):
-            if TEST_WITH_ROCM:
-                prop = torch.cuda.get_device_properties(0)
-                if prop.gcnArchName.split(":")[0] not in arch:
-                    reason = f"skipIfRocm: test only runs on {arch}"
-                    raise unittest.SkipTest(reason)
-            return fn(self, *args, **kwargs)
-        return wrap_fn
-    return dec_fn
 
 def skipIfXpu(func=None, *, msg="test doesn't currently work on the XPU stack"):
     def dec_fn(fn):
@@ -5008,14 +4987,18 @@ def get_cycles_per_ms() -> float:
     """
 
     def measure() -> float:
-        start = torch.cuda.Event(enable_timing=True)
-        end = torch.cuda.Event(enable_timing=True)
-        start.record()
-        torch.cuda._sleep(1000000)
-        end.record()
-        end.synchronize()
-        cycles_per_ms = 1000000 / start.elapsed_time(end)
-        return cycles_per_ms
+        if torch.cuda.is_available():
+            start = torch.cuda.Event(enable_timing=True)
+            end = torch.cuda.Event(enable_timing=True)
+            start.record()
+            torch.cuda._sleep(1000000)
+            end.record()
+            end.synchronize()
+            cycles_per_ms = 1000000 / start.elapsed_time(end)
+            return cycles_per_ms
+        elif torch.xpu.is_available():
+            cycles_per_ms = 1000000 / 1000.0
+            return cycles_per_ms
 
     # Get 10 values and remove the 2 max and 2 min and return the avg.
     # This is to avoid system disturbance that skew the results, e.g.

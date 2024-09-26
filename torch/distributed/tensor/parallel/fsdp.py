@@ -182,11 +182,16 @@ def _chunk_tensor(
 
         inner_param = tensor._local_tensor
 
+        if device_mesh.device_type == "xpu":
+            device_count = torch.xpu.device_count()
+        else:
+            device_count = torch.cuda.device_count()
+
         inner_st = _create_chunk_sharded_tensor(
             inner_param,
             rank,
             world_size,
-            torch.cuda.device_count(),
+            device_count,
             pg,
         )
 

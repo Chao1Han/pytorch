@@ -2,6 +2,8 @@
 # Owner(s): ["oncall: distributed"]
 
 import torch
+import intel_extension_for_pytorch
+import oneccl_bindings_for_pytorch
 from torch.distributed._tensor import DeviceMesh
 from torch.distributed._tensor.placement_types import DTensorSpec, TensorMeta
 from torch.distributed.tensor._op_schema import OpSchema

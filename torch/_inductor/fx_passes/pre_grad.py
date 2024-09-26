@@ -98,10 +98,13 @@ def remove_noop_pass(graph):
 
 def stack_to_unsqueeze_pass(graph):
     return None
+<<<<<<< HEAD
+=======
 
 
 def merge_concats_pass(graph):
     return None
+>>>>>>> upstream/main
 
 
 @init_once_fakemode
