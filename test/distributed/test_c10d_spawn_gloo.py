@@ -16,6 +16,7 @@ from torch.testing._internal.common_distributed import (
     create_device,
     requires_gloo,
     skip_if_lt_x_gpu,
+    requires_cuda,
 )
 from torch.testing._internal.common_utils import (
     run_tests,
@@ -221,6 +222,7 @@ if not TEST_WITH_DEV_DBG_ASAN:
 
     class TestDistributedNNFunctionsGloo(TestDistributedNNFunctions):
         # Test Common Ops First.
+        @requires_cuda()
         @requires_gloo()
         @skip_if_lt_x_gpu(2)
         @skip_but_pass_in_sandcastle_if(
@@ -229,6 +231,7 @@ if not TEST_WITH_DEV_DBG_ASAN:
         def test_broadcast(self):
             self._test_broadcast("gloo")
 
+        @requires_cuda()
         @requires_gloo()
         @skip_if_lt_x_gpu(2)
         @skip_but_pass_in_sandcastle_if(
@@ -237,6 +240,7 @@ if not TEST_WITH_DEV_DBG_ASAN:
         def test_reduce(self):
             self._test_reduce("gloo")
 
+        @requires_cuda()
         @requires_gloo()
         @skip_if_lt_x_gpu(2)
         @skip_but_pass_in_sandcastle_if(
@@ -245,6 +249,7 @@ if not TEST_WITH_DEV_DBG_ASAN:
         def test_allreduce(self):
             self._test_allreduce("gloo")
 
+        @requires_cuda()
         @requires_gloo()
         @skip_if_lt_x_gpu(2)
         @skip_but_pass_in_sandcastle_if(
@@ -253,6 +258,7 @@ if not TEST_WITH_DEV_DBG_ASAN:
         def test_all_gather(self):
             self._test_all_gather("gloo")
 
+        @requires_cuda()
         @requires_gloo()
         @skip_if_lt_x_gpu(2)
         @skip_but_pass_in_sandcastle_if(
@@ -261,6 +267,7 @@ if not TEST_WITH_DEV_DBG_ASAN:
         def test_all_to_all(self):
             self._test_all_to_all("gloo")
 
+        @requires_cuda()
         @requires_gloo()
         @skip_if_lt_x_gpu(2)
         @skip_but_pass_in_sandcastle_if(
@@ -270,6 +277,7 @@ if not TEST_WITH_DEV_DBG_ASAN:
             self._test_all_to_all_single("gloo")
 
         # Test Ops only supported in GLOO.
+        @requires_cuda()
         @requires_gloo()
         @skip_if_lt_x_gpu(2)
         @skip_but_pass_in_sandcastle_if(
@@ -301,6 +309,7 @@ if not TEST_WITH_DEV_DBG_ASAN:
             x_s = 3 * torch.ones(5, 5, device=device)
             self.assertEqual(x.grad, x_s.cos())
 
+        @requires_cuda()
         @requires_gloo()
         @skip_if_lt_x_gpu(2)
         @skip_but_pass_in_sandcastle_if(

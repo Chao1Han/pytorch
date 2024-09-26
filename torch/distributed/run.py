@@ -679,6 +679,11 @@ def determine_local_world_size(nproc_per_node: str):
         if nproc_per_node == "cpu":
             num_proc = os.cpu_count()
             device_type = "cpu"
+        elif nproc_per_node == "xpu":
+            if not torch.xpu.is_available():
+                raise ValueError("Cuda is not available.") from e
+            device_type = "xpu"
+            num_proc = torch.xpu.device_count()
         elif nproc_per_node == "gpu":
             if not torch.cuda.is_available():
                 raise ValueError("Cuda is not available.") from e
@@ -693,6 +698,9 @@ def determine_local_world_size(nproc_per_node: str):
             if torch.cuda.is_available():
                 num_proc = torch.cuda.device_count()
                 device_type = "gpu"
+            elif torch.xpu.is_available():
+                num_proc = torch.xpu.device_count()
+                device_type = "xpu"
             elif (
                 hasattr(torch, torch._C._get_privateuse1_backend_name())
                 and _get_custom_mod_func("is_available")()

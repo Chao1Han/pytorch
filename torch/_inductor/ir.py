@@ -233,9 +233,7 @@ NHWC_STRIDE_ORDER = [3, 0, 2, 1]
 NHWDC_STRIDE_ORDER = [4, 0, 3, 2, 1]
 
 
-def stride_order2fill_order(
-    order: Sequence[Union[int, Integer]]
-) -> Sequence[Union[int, Integer]]:
+def stride_order2fill_order(order: Sequence[Union[int, Integer]]) -> Sequence[int]:
     """
     Convert stride order to fill order
     For channel last format,
@@ -4785,7 +4783,7 @@ class ExternKernel(InputsKernel):
                         want_contiguous=False,
                         stride_order=None,
                         allow_padding=allow_padding,
-                        exact_strides=exact_strides,
+                        exact_strides=exact_strides,  # type: ignore[arg-type]  # int|Expr vs int|Integer
                     )
                     return x
             elif isinstance(x.get_layout(), FixedLayout) and (
@@ -4855,7 +4853,7 @@ class ExternKernel(InputsKernel):
             want_contiguous=False,
             stride_order=order,
             allow_padding=allow_padding,
-            exact_strides=exact_strides,
+            exact_strides=exact_strides,  # type: ignore[arg-type]  # int|Expr vs int|Integer
         )
         if order:
             assert is_stride_order_storage_and_layout(x, order)
@@ -6743,6 +6741,316 @@ class TorchBindObject(IRNode):
         return self.name
 
 
+<<<<<<< HEAD
+class InterpreterShim(torch.fx.Interpreter):
+    @staticmethod
+    @functools.lru_cache(None)
+    def _dummy_gm():
+        return torch.fx.symbolic_trace(identity)
+
+    def __init__(self, graph, submodules):
+        # call super() with a placeholder to avoid constructing a
+        # GraphModule which is very expensive (it does codegen).
+        super().__init__(self._dummy_gm(), garbage_collect_values=False)
+        self.module = self  # type: ignore[assignment]
+        self.graph = graph
+        self.submodules = submodules
+        self.extra_traceback = False
+        self.fetch_attr = submodules.__getitem__  # type: ignore[method-assign]
+        self.current_node = None
+
+    def run_node(self, n: torch.fx.Node) -> Any:
+        self.current_node = n
+        return super().run_node(n)
+
+    def run(self, *args, **kwargs):
+        with V.set_interpreter_handler(self):
+            return super().run(*args, **kwargs)
+
+
+class LoopBody:
+    """
+    Captures the body of a Loops subclass into an FX graph.  Persists any
+    indexing simplifications and makes it easier to analyze loop bodies.
+    """
+
+    def __init__(self, fn, args, var_ranges):
+        super().__init__()
+        self.var_ranges = var_ranges
+        self.indexing_exprs = {}
+        self.indexing_exprs_name = {}
+        self.reads = []
+        self.writes = []
+        self.reads_name2expr = {}
+        self.writes_name2expr = {}
+        self.other = []
+        self.submodules = {"get_index": self.get_index}
+        self.subblocks = {}
+        self.indirect_vars = []
+        self.indirect_var_ranges: Dict[sympy.Symbol, sympy.Expr] = {}
+        self.root_block = LoopBodyBlock(self, fn, args)
+        self.indexing = None
+
+    @cache_on_self
+    def get_nodes(self):
+        all_graphs = itertools.chain(
+            (self.root_block.graph,),
+            (block.graph for block in self.subblocks.values()),
+        )
+        return [node for graph in all_graphs for node in graph.nodes]
+
+    @cache_on_self
+    def bounds(self):
+        # Doing a local import to avoid dumping all the code here
+        from .bounds import BoundVars
+
+        return BoundVars(self)
+
+    def debug_str(self):
+        lines = [f"var_ranges = {dict(self.var_ranges)}"]
+        lines.extend([f"{name} = {val}" for name, val in self.indexing_exprs.items()])
+        lines.extend(
+            [
+                block.debug_str(name)
+                for name, block in itertools.chain(
+                    [("body", self.root_block)], self.subblocks.items()
+                )
+            ]
+        )
+        return "\n".join(lines)
+
+    def add_index_expr(self, expr: sympy.Expr, category, buf_name):
+        getattr(self, category).append(expr)
+        if buf_name is not None:
+            getattr(self, f"{category}_name2expr")[buf_name] = expr
+        if expr not in self.indexing_exprs_name:
+            name = f"index{len(self.indexing_exprs)}"
+            self.indexing_exprs_name[expr] = name
+            self.indexing_exprs[name] = expr
+        return self.indexing_exprs_name[expr]
+
+    def add_submodule(self, block, prefix):
+        """Not actually for nn.Modules, but subblocks in generated code are mapped to FX call_module opcodes"""
+        if prefix[-1].isnumeric() and prefix not in self.submodules:
+            name = prefix
+        else:
+            name = f"{prefix}{len(self.submodules)}"
+        self.submodules[name] = block
+        return name
+
+    def add_indirect(self, size):
+        var = sympy_index_symbol_with_prefix(SymT.INDIRECT, len(self.indirect_vars))
+        assert var not in self.indirect_var_ranges
+        self.indirect_vars.append(var)
+        self.indirect_var_ranges[var] = size
+        return var
+
+    def replace_indirect(self, old, new):
+        """Swap in a variable used in indirect indexing"""
+        if str(old) == str(new):
+            return
+        assert self.indexing is not None
+        self.indexing = {k: sympy_subs(v, {old: new}) for k, v in self.indexing.items()}
+
+    def get_index(self, name):
+        assert self.indexing is not None
+        return self.indexing[name]
+
+    def indexing_from_args(self, indices):
+        index = [*itertools.chain.from_iterable(indices)]
+        assert len(index) == len(self.var_ranges), (index, self.var_ranges)
+        assert all(v not in self.var_ranges for v in index)
+        replacements = dict(zip(self.var_ranges.keys(), index))
+        return {
+            name: sympy_subs(expr, replacements)
+            for name, expr in self.indexing_exprs.items()
+        }
+
+    def __call__(self, *indices):
+        self.indexing = self.indexing_from_args(indices)
+        result = self.root_block()
+        self.indexing = None
+        return result
+
+
+class LoopBodyBlock:
+    """
+    Captures the body of a Loops subclass into an FX graph.
+    In normal cases there will be a 1:1 mapping between LoopBody and
+    LoopBodyBlock, hower in the case of ops.masked() the masked out
+    operations will manifest as an extra LoopBodyBlock.
+    """
+
+    def __init__(self, body: LoopBody, fn: Callable[..., Any], args: List[Any]):
+        self.body = body
+
+        def add_index(expr, category, buf_name=None):
+            return tracer.create_proxy(
+                "call_module",
+                "get_index",
+                (self.body.add_index_expr(expr, category, buf_name),),
+                {},
+            )
+
+        class CaptureIndexing(V.WrapperHandler):  # type: ignore[name-defined]
+            self.name = "CaptureIndexing"
+
+            def load(self, name: str, index: sympy.Expr):
+                index = add_index(index, "reads", name)
+                return self._inner.load(name, index)
+
+            def store(self, name, index, value, mode=None):
+                index = add_index(index, "writes", name)
+                return self._inner.store(name, index, value, mode)
+
+            def store_reduction(self, name, index, value):
+                index = add_index(index, "writes", name)
+                return self._inner.store_reduction(name, index, value)
+
+            def reduction(self, dtype, src_dtype, reduction_type, value):
+                result = self._inner.reduction(dtype, src_dtype, reduction_type, value)
+                if "welford" in reduction_type:
+                    return tuple(result[i] for i in range(3))
+                return result
+
+            def index_expr(self, index, dtype):
+                if isinstance(index, (int, sympy.Integer)):
+                    return self._inner.constant(int(index), dtype)
+                index = add_index(index, "other")
+                return self._inner.index_expr(index, dtype)
+
+            def check_bounds(self, index, size, lower, upper):
+                index = add_index(index, "other")
+                size = add_index(size, "other")
+                return self._inner.check_bounds(index, size, lower, upper)
+
+            def bucketize(
+                self,
+                values,
+                offsets_name: str,
+                offsets_size: sympy.Expr,
+                indexing_dtype: torch.dtype,
+                right: bool,
+            ):
+                offsets_size = add_index(offsets_size, "other")
+                return self._inner.bucketize(
+                    values, offsets_name, offsets_size, indexing_dtype, right
+                )
+
+            @staticmethod
+            def masked(mask_proxy, masked_body: Callable[..., Any], other_proxy):
+                """
+                Recursively capture the masked out body in another LoopBodyBlock
+                """
+
+                subblock: LoopBodyBlock
+
+                def shim(mask, other):
+                    return V.ops.masked(mask, subblock, other)
+
+                name = self.body.add_submodule(shim, "masked_subblock")
+                subblock = LoopBodyBlock(self.body, masked_body, [])
+                self.body.subblocks[name] = subblock
+                return tracer.create_proxy(
+                    "call_module", name, (mask_proxy, other_proxy), {}
+                )
+
+            @staticmethod
+            def scan(
+                dtype_proxy,
+                combine_fn: Callable[
+                    [Tuple[Any, ...], Tuple[Any, ...]], Tuple[Any, ...]
+                ],
+                value_proxy,
+            ):
+                def shim(dtypes, values):
+                    return V.ops.scan(dtypes, combine_fn, values)
+
+                name = self.body.add_submodule(shim, "scan")
+                result = tracer.create_proxy(
+                    "call_module",
+                    name,
+                    (dtype_proxy, value_proxy),
+                    {},
+                )
+                # Proxies are iterable, but some methods expect tuples/lists
+                return tuple(result[i] for i in range(len(value_proxy)))
+
+            def sort(self, dtypes, values, stable, descending):
+                result = self._inner.sort(dtypes, values, stable, descending)
+                # Proxies are iterable, but some methods expect tuples/lists
+                return tuple(result[i] for i in range(len(values)))
+
+            def frexp(self, value_proxy):
+                result = self._inner.frexp(value_proxy)
+                # Proxies are iterable, but some methods expect tuples/lists
+                return (result[0], result[1])
+
+            @staticmethod
+            def indirect_indexing(index_proxy, size, check=True, wrap_neg=True):
+                """
+                Flow data from tensors into indexing formulas.
+                Introduce a call_module to update the indexing.
+                """
+
+                var = self.body.add_indirect(size)
+
+                def set_indirect(new_var):
+                    self.body.replace_indirect(
+                        var, V.ops.indirect_indexing(new_var, size, check, wrap_neg)
+                    )
+
+                tracer.create_proxy(
+                    "call_module",
+                    self.body.add_submodule(set_indirect, f"set_{var}"),
+                    (index_proxy,),
+                    {},
+                )
+                return var
+
+            @staticmethod
+            def output(result):
+                tracer.create_proxy("output", "output", (result,), {})
+
+        tracer = torch.fx.Tracer()
+        tracer.graph = torch.fx.Graph(tracer_cls=tracer.__class__)
+        proxy_ops = tracer.create_proxy("placeholder", "ops", (), {})
+
+        from .index_propagation import IndexPropagation
+        from .sizevars import SimplifyIndexing
+
+        handler: Any = SimplifyIndexing(
+            CaptureIndexing(proxy_ops), self.body.var_ranges
+        )
+        if config.constant_and_index_propagation:
+            handler = IndexPropagation(
+                handler, self.body.var_ranges, self.body.indirect_var_ranges
+            )
+
+        with V.set_ops_handler(handler):
+            # This indirection is just a cute way to get IndexPropagation to
+            # unwrap the return value.
+            ops.output(fn(*args))
+        self.graph = tracer.graph
+
+    def __call__(self):
+        graph = self.graph
+        submodules = self.body.submodules
+
+        return InterpreterShim(graph, submodules).run(V.get_ops_handler())
+
+    def debug_str(self, name="block"):
+        code = torch.fx.GraphModule(self.body.submodules, self.graph).code
+        return re.sub(
+            # strip `; del var0` suffixes to make output prettier
+            r";[^\n]*",
+            "",
+            code.strip().replace("def forward(", f"def {name}("),
+        )
+
+
+=======
+>>>>>>> upstream/main
 class _CollectiveKernel(FallbackKernel):
     def should_allocate(self):
         return False

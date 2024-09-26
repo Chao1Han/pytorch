@@ -507,12 +507,33 @@ def _get_os_related_cpp_cflags(cpp_compiler: str) -> List[str]:
     return cflags
 
 
+def _get_ffast_math_flags() -> List[str]:
+    # ffast-math is equivalent to these flags as in
+    # https://github.com/gcc-mirror/gcc/blob/4700ad1c78ccd7767f846802fca148b2ea9a1852/gcc/opts.cc#L3458-L3468
+    # however gcc<13 sets the FTZ/DAZ flags for runtime on x86 even if we have
+    # -ffast-math -fno-unsafe-math-optimizations because the flags for runtime
+    # are added by linking in crtfastmath.o. This is done by the spec file which
+    # only does globbing for -ffast-math.
+    flags = [
+        "fno-trapping-math",
+        "funsafe-math-optimizations",
+        "ffinite-math-only",
+        "fno-signed-zeros",
+        "fno-math-errno",
+    ]
+
+    if is_gcc():
+        flags.append("fexcess-precision=fast")
+
+    return flags
+
+
 def _get_optimization_cflags() -> List[str]:
     if _IS_WINDOWS:
         return ["O2"]
     else:
         cflags = ["O0", "g"] if config.aot_inductor.debug_compile else ["O3", "DNDEBUG"]
-        cflags.append("ffast-math")
+        cflags += _get_ffast_math_flags()
         cflags.append("fno-finite-math-only")
 
         if not config.cpp.enable_unsafe_math_opt_flag:
@@ -848,6 +869,8 @@ def perload_clang_libomp_win(cpp_compiler: str, omp_name: str) -> None:
         pass
 
 
+<<<<<<< HEAD
+=======
 @functools.lru_cache(None)
 def perload_icx_libomp_win(cpp_compiler: str) -> None:
     def _load_icx_built_in_lib_by_name(cpp_compiler: str, lib_name: str) -> bool:
@@ -879,6 +902,7 @@ def perload_icx_libomp_win(cpp_compiler: str) -> None:
         _load_icx_built_in_lib_by_name(cpp_compiler, lib_name)
 
 
+>>>>>>> upstream/main
 def _get_openmp_args(
     cpp_compiler: str,
 ) -> Tuple[List[str], List[str], List[str], List[str], List[str], List[str]]:
@@ -935,6 +959,8 @@ def _get_openmp_args(
         # if openmp is still not available, we let the compiler to have a try,
         # and raise error together with instructions at compilation error later
     elif _IS_WINDOWS:
+<<<<<<< HEAD
+=======
         """
         On Windows, `clang` and `icx` have their specific openmp implenmention.
         And the openmp lib is in compiler's some sub-directory.
@@ -949,14 +975,18 @@ def _get_openmp_args(
         1. For clang, the function is `perload_clang_libomp_win`.
         2. For icx, the function is `perload_icx_libomp_win`.
         """
+>>>>>>> upstream/main
         if _is_clang(cpp_compiler):
             cflags.append("openmp")
             libs.append("libomp")
             perload_clang_libomp_win(cpp_compiler, "libomp.dll")
+<<<<<<< HEAD
+=======
         elif _is_intel_compiler(cpp_compiler):
             cflags.append("Qiopenmp")
             libs.append("libiomp5md")
             perload_icx_libomp_win(cpp_compiler)
+>>>>>>> upstream/main
         else:
             # /openmp, /openmp:llvm
             # llvm on Windows, new openmp: https://devblogs.microsoft.com/cppblog/msvc-openmp-update/
@@ -1229,7 +1259,11 @@ def get_cpp_torch_device_options(
         else:
             include_dirs.append(os.path.join(build_paths.cuda(), "include"))
 
+<<<<<<< HEAD
+        if aot_mode and cuda:
+=======
         if aot_mode and device_type == "cuda":
+>>>>>>> upstream/main
             if torch.version.hip is None:
                 if not compile_only:
                     # Only add link args, when compile_only is false.
@@ -1298,6 +1332,15 @@ class CppTorchDeviceOptions(CppTorchOptions):
         ) = get_cpp_torch_device_options(
             device_type=device_type, aot_mode=aot_mode, compile_only=compile_only
         )
+<<<<<<< HEAD
+        _append_list(self._definations, cuda_definations)
+        _append_list(self._include_dirs, cuda_include_dirs)
+        _append_list(self._cflags, cuda_cflags)
+        _append_list(self._ldflags, cuda_ldflags)
+        _append_list(self._libraries_dirs, cuda_libraries_dirs)
+        _append_list(self._libraries, cuda_libraries)
+        _append_list(self._passthough_args, cuda_passthough_args)
+=======
         _append_list(self._definations, device_definations)
         _append_list(self._include_dirs, device_include_dirs)
         _append_list(self._cflags, device_cflags)
@@ -1305,6 +1348,7 @@ class CppTorchDeviceOptions(CppTorchOptions):
         _append_list(self._libraries_dirs, device_libraries_dirs)
         _append_list(self._libraries, device_libraries)
         _append_list(self._passthough_args, device_passthough_args)
+>>>>>>> upstream/main
         self._finalize_options()
 
 

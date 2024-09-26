@@ -4,6 +4,8 @@ import sys
 from typing import Optional
 
 import torch
+import intel_extension_for_pytorch
+import oneccl_bindings_for_pytorch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import distributed as dist
@@ -30,17 +32,20 @@ if not dist.is_available():
     print("Distributed not available, skipping tests", file=sys.stderr)
     sys.exit(0)
 
-# bfloat16 is only supported by CUDA 11+
-BFLOAT16_AVAILABLE = torch.cuda.is_available() and (
-    torch.version.cuda is not None or torch.version.hip is not None
-)
+# bfloat16 is only supported by xpu 11+
+if torch.cuda.is_available():
+    BFLOAT16_AVAILABLE = torch.cuda.is_available() and (
+        torch.version.cuda is not None or torch.version.hip is not None
+    )
+else:
+    BFLOAT16_AVAILABLE = torch.xpu.is_available()
 
 
 class Net(nn.Module):
     def __init__(self, has_wrapping, sharding_strategy, mixed_precision=None):
         # to ensure determinism
         torch.manual_seed(0)
-        torch.cuda.manual_seed(0)
+        torch.xpu.manual_seed(0)
         super().__init__()
 
         if has_wrapping:
@@ -50,12 +55,12 @@ class Net(nn.Module):
                     nn.ReLU(),
                     FSDP(
                         nn.Linear(16, 8),
-                        device_id=torch.cuda.current_device(),
+                        device_id=torch.xpu.current_device(),
                         sharding_strategy=sharding_strategy,
                         mixed_precision=mixed_precision,
                     ),
                 ),
-                device_id=torch.cuda.current_device(),
+                device_id=torch.xpu.current_device(),
                 sharding_strategy=sharding_strategy,
                 mixed_precision=mixed_precision,
             )
@@ -134,11 +139,11 @@ class TestCommunicationHooks(FSDPTest):
         """
         out_dim = self.world_size
         net = torch.nn.Linear(1, out_dim, bias=False)
-        inpt = torch.tensor([self.rank]).float().cuda(self.rank)
+        inpt = torch.tensor([self.rank]).float().xpu(self.rank)
 
         net_default_hook = FSDP(
             net,
-            device_id=torch.cuda.current_device(),
+            device_id=torch.xpu.current_device(),
             sharding_strategy=sharding_strategy,
         ).to(self.rank)
 
@@ -172,10 +177,10 @@ class TestCommunicationHooks(FSDPTest):
         ]
 
     def _init_model(self, core, sharding_strategy, mixed_precision=None):
-        device = torch.device("cuda")
+        device = torch.device("xpu")
         return FSDP(
             core,
-            device_id=torch.cuda.current_device(),
+            device_id=torch.xpu.current_device(),
             sharding_strategy=sharding_strategy,
             mixed_precision=mixed_precision,
         ).to(device)
@@ -277,7 +282,7 @@ class TestCommunicationHooks(FSDPTest):
             ShardingStrategy.HYBRID_SHARD,
             ShardingStrategy._HYBRID_SHARD_ZERO2,
         ):
-            model = Net(False, None, None).cuda()
+            model = Net(False, None, None).xpu()
             fsdp_model = FSDP(
                 model,
                 auto_wrap_policy=ModuleWrapPolicy({nn.Linear}),
@@ -337,7 +342,7 @@ class TestCommunicationHooks(FSDPTest):
     ):
         # keep everything deterministic for input data
         torch.manual_seed(0)
-        torch.cuda.manual_seed(0)
+        torch.xpu.manual_seed(0)
 
         fsdp_with_hook = self._init_model(
             Net(has_wrapping=has_wrapping, sharding_strategy=sharding_strategy),
@@ -359,7 +364,7 @@ class TestCommunicationHooks(FSDPTest):
         optim_hook = torch.optim.SGD(fsdp_with_hook.parameters(), lr=0.1)
         optim_mp = torch.optim.SGD(fsdp_with_mp.parameters(), lr=0.1)
 
-        in_data = torch.rand(16, 8).cuda()
+        in_data = torch.rand(16, 8).xpu()
         fsdp_with_hook.train()
         fsdp_with_mp.train()
         loss_hook = fsdp_with_hook(in_data).sum()
@@ -403,7 +408,7 @@ class TestCommunicationHooks(FSDPTest):
     @requires_nccl_version((2, 10), "Need NCCL 2.10+ for BF16_COMPRESS")
     @skip_but_pass_in_sandcastle_if(
         not BFLOAT16_AVAILABLE,
-        "BFloat16 is only supported by CUDA 11+",
+        "BFloat16 is only supported by xpu 11+",
     )
     @skip_if_lt_x_gpu(2)
     @parametrize("has_wrapping", [True, False])

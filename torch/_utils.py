@@ -904,7 +904,10 @@ def _functionalize_sync(t):
 
 
 @functools.lru_cache(2)
-def _get_device_module(device_type: str):
+def _get_device_module(device_type: str = None):
+    if device_type is None:
+        current_device = torch._C._get_accelerator()
+        device_type = current_device.type
     device_module = getattr(torch, device_type, None)
     if device_module is None:
         raise RuntimeError(

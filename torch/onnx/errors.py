@@ -18,11 +18,23 @@ if TYPE_CHECKING:
 
 
 class OnnxExporterWarning(UserWarning):
+<<<<<<< HEAD
+    """Base class for all warnings in the ONNX exporter."""
+
+
+class OnnxExporterError(RuntimeError):
+    """Errors raised by the ONNX exporter."""
+
+
+class CheckerError(OnnxExporterError):
+    """Raised when ONNX checker detects an invalid model."""
+=======
     """Warnings in the ONNX exporter."""
 
 
 class OnnxExporterError(RuntimeError):
     """Errors raised by the ONNX exporter. This is the base class for all exporter errors."""
+>>>>>>> upstream/main
 
 
 class UnsupportedOperatorError(OnnxExporterError):

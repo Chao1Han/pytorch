@@ -6,6 +6,8 @@ from copy import deepcopy
 from functools import partial
 
 import torch
+import intel_extension_for_pytorch
+import oneccl_bindings_for_pytorch
 import torch.nn as nn
 from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
     apply_activation_checkpointing,
@@ -130,7 +132,7 @@ class CheckpointWrapperTest(TestCase):
         m(torch.randn(2, 1)).sum().backward()
         self.assertEqual(2, count)
 
-    @unittest.skipIf(not torch.cuda.is_available(), "Test requires CUDA")
+    @unittest.skipIf(not torch.xpu.is_available(), "Test requires xpu")
     def test_checkpoint_wrapper_parity(self):
         """
         Tests that using checkpoint_wrapper or the functional
@@ -184,12 +186,12 @@ class CheckpointWrapperTest(TestCase):
                 use_checkpointing,
                 use_wrapper=use_wrapper,
                 use_reentrant=use_reentrant,
-            ).cuda()
-            x = torch.randn(10000, 256, requires_grad=True).cuda()
-            torch.cuda.reset_peak_memory_stats()
+            ).xpu()
+            x = torch.randn(10000, 256, requires_grad=True).xpu()
+            torch.xpu.reset_peak_memory_stats()
             loss = a(x).sum()
             loss.backward()
-            return torch.cuda.max_memory_allocated()
+            return torch.xpu.max_memory_allocated()
 
         functional_no_reentrant = test(
             use_checkpointing=True, use_wrapper=False, use_reentrant=False
@@ -333,13 +335,13 @@ class CheckpointWrapperTest(TestCase):
         for fqn, _ in lin.named_parameters():
             self.assertTrue(fqn in state_dict, msg=f"{fqn} not in state_dict.")
 
-    @unittest.skipIf(not torch.cuda.is_available(), "Test requires CUDA")
+    @unittest.skipIf(not torch.xpu.is_available(), "Test requires xpu")
     def test_checkpoint_wrapper_cpu_offload(self):
         model = nn.Sequential(
             nn.Linear(10, 10),
             nn.Linear(10, 10),
             nn.Linear(10, 10),
-        ).cuda()
+        ).xpu()
 
         # Patch saved_tensor_hooks to make the unpack keep the tensor on CPU for
         # testing, otherwise the tensor access during the DFS will cause orig
@@ -358,7 +360,7 @@ class CheckpointWrapperTest(TestCase):
 
         model = offload_wrapper(model)
 
-        inp = torch.randn(3, 10, device="cuda")
+        inp = torch.randn(3, 10, device="xpu")
         loss = model(inp).sum()
 
         # All autograd saved tensors should be offloaded to CPU.

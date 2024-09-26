@@ -53,12 +53,16 @@ from typing_extensions import TypeAlias
 import torch
 import torch.distributed as dist
 from torch import SymInt, Tensor
+<<<<<<< HEAD
+from torch._dynamo.utils import counters, dynamo_timed, get_chromium_event_logger
+=======
 from torch._dynamo.utils import (
     add_remote_cache_time_saved,
     counters,
     dynamo_timed,
     get_chromium_event_logger,
 )
+>>>>>>> upstream/main
 from torch._inductor import config, exc, metrics
 from torch._inductor.codegen.cuda import cuda_env
 from torch._inductor.codegen.rocm.compile_command import (
@@ -67,6 +71,7 @@ from torch._inductor.codegen.rocm.compile_command import (
 )
 from torch._utils_internal import log_cache_bypass
 
+from .remote_cache import create_cache
 from .utils import _align
 
 
@@ -76,7 +81,11 @@ T = TypeVar("T")
 if TYPE_CHECKING:
     from collections.abc import KeysView
 
+<<<<<<< HEAD
+    from .remote_cache import RemoteCacheBackend
+=======
     from .remote_cache import JsonDataTy, RemoteCache
+>>>>>>> upstream/main
 
 
 """
@@ -451,7 +460,11 @@ def write_text(text: str) -> str:
 
 
 def write_atomic(
+<<<<<<< HEAD
+    path: str,
+=======
     path_: str,
+>>>>>>> upstream/main
     content: Union[str, bytes],
     make_dirs: bool = False,
     encode_utf_8: bool = False,
@@ -538,7 +551,11 @@ def _reduce_tensor(
         # TODO: These tensors don't currently pickle, so we can't cache a
         # compiled graph containing them. Just fail now. If mkldnn tensors
         # get pickling support, we can remove this.
+<<<<<<< HEAD
+        raise BypassFxGraphCache("mkldnn tensors unpickleable.")
+=======
         raise BypassFxGraphCache("mkldnn tensors unpickleable")
+>>>>>>> upstream/main
 
     # Very large tensors could be expensive to copy to cpu and hash. Let's
     # at least report if we find slowness.
@@ -569,7 +586,11 @@ def _reduce_unsupported(s: Any) -> NoReturn:
     See FxGraphCachePickler. Custom reducer to handle any objects that we don't
     support and therefore raise to bypass caching.
     """
+<<<<<<< HEAD
+    raise BypassFxGraphCache("Reduce unsupported.")
+=======
     raise BypassFxGraphCache("Reduce unsupported")
+>>>>>>> upstream/main
 
 
 class FxGraphCachePickler(pickle.Pickler):
@@ -607,7 +628,11 @@ class FxGraphCachePickler(pickle.Pickler):
                 # Some configs options are callables, e.g., post_grad_custom_pre_pass,
                 # and may not pickle.
                 log.warning("Can't pickle", exc_info=True)
+<<<<<<< HEAD
+                raise BypassFxGraphCache("Config options may be unpickleable.") from e
+=======
                 raise BypassFxGraphCache("Config options may be unpickleable") from e
+>>>>>>> upstream/main
             return stream.getvalue()
 
     @classmethod
@@ -1193,7 +1218,11 @@ class FxGraphCache:
         compiled_graph: CompiledFxGraph,
         example_inputs: List[torch.Tensor],
         local: bool,
+<<<<<<< HEAD
+        remote_cache: Optional[RemoteCacheBackend],
+=======
         remote_cache: Optional[RemoteCache[JsonDataTy]],
+>>>>>>> upstream/main
     ) -> None:
         """
         Store a serialized CompiledFxGraph on disk.
@@ -1241,11 +1270,23 @@ class FxGraphCache:
 
             if remote_cache:
                 time_taken_ms = int((disk_compiled_graph._time_taken_ns or 0) // 1e6)
+<<<<<<< HEAD
+                cache_data = (
+                    {
+                        "data": content,
+                        "time_taken_ms": time_taken_ms,
+                    }
+                    if config.is_fbcode()
+                    else content
+                )
+                remote_cache.put(key, cache_data)  # type: ignore[arg-type]
+=======
                 cache_data: JsonDataTy = {
                     "data": base64.b64encode(content).decode("ascii"),
                     "time_taken_ms": time_taken_ms,
                 }
                 remote_cache.put(key, cache_data)
+>>>>>>> upstream/main
         except Exception:
             log.warning("fx graph unable to write to cache", exc_info=True)
             counters["inductor"]["fxgraph_cache_write_error"] += 1
@@ -1259,27 +1300,49 @@ class FxGraphCache:
         # Freezing can embed constants that wouldn't be static across runs.
         if config.freezing or config.aot_inductor.use_runtime_constant_folding:
             raise BypassFxGraphCache(
+<<<<<<< HEAD
+                "Freezing may introduce constants that aren't static across runs."
+=======
                 "Freezing may introduce constants that aren't static across runs"
+>>>>>>> upstream/main
             )
 
         # The treatment of guards in the caching implementation requires that
         # we have a shape env.
         if FxGraphCache._get_shape_env() is None:
             log.debug("fx graph cache no shape env")
-            raise BypassFxGraphCache("No shape env")
+<<<<<<< HEAD
+            raise BypassFxGraphCache("No shape env.")
 
         # HigherOrderOperators should be handled on a case-by-case basis.
         # Currently, we just skip caching if we have any.
         # We also skip if there are any torchbind objects.
         for node in gm.graph.nodes:
             if isinstance(node.target, torch._ops.HigherOrderOperator):
-                raise BypassFxGraphCache(
-                    f"Can't cache HigherOrderOperator: {node.target.name()}"
-                )
+                raise BypassFxGraphCache("Can't cache HigherOrderOperators.")
             if node.op == "getattr" and isinstance(
                 getattr(gm, node.target), torch._C.ScriptObject
             ):
-                raise BypassFxGraphCache("Can't cache torchbind objects")
+                raise BypassFxGraphCache("Can't cache torchbind objects.")
+=======
+            raise BypassFxGraphCache("No shape env")
+
+        # We skip caching if there are any torchbind objects.
+        for module in gm.modules():
+            if not isinstance(module, torch.fx.GraphModule):
+                continue
+            for node in module.graph.nodes:
+                if (
+                    isinstance(node.target, torch._ops.HigherOrderOperator)
+                    and not node.target.cacheable()
+                ):
+                    raise BypassFxGraphCache(
+                        f"Can't cache HigherOrderOperator: {node.target.name()}"
+                    )
+                if node.op == "getattr" and isinstance(
+                    getattr(gm, node.target), torch._C.ScriptObject
+                ):
+                    raise BypassFxGraphCache("Can't cache torchbind objects")
 
     @staticmethod
     def prepare_key(
@@ -1323,25 +1386,13 @@ class FxGraphCache:
         """
         Attempts to load the remote cache, returns None on error.
         """
-        remote_cache = None
         cache_id = "fx-graph-v1"
-        try:
-            if config.is_fbcode():
-                from torch._inductor.fb.remote_cache import FbRemoteFxGraphCache
-
-                remote_cache = FbRemoteFxGraphCache(cache_id)
-            else:
-                from torch._inductor.remote_cache import RemoteFxGraphCache
-
-                remote_cache = RemoteFxGraphCache(cache_id)
-        except ModuleNotFoundError as e:
-            # No need for a stack trace on this error
-            remote_cache = None
-            log.warning("Unable to create a remote cache: %s", e)
-        except Exception:
-            remote_cache = None
-            log.warning("Unable to create a remote cache", exc_info=True)
-        return remote_cache
+        return create_cache(
+            cache_id,
+            config.is_fbcode(),
+            "FbRemoteFxGraphCache",
+            "RemoteFxGraphCache",
+        )
 
     @staticmethod
     def load_with_key(
@@ -1385,6 +1436,7 @@ class FxGraphCache:
             cache_info["cache_state"] = "miss"
 
         return compiled_graph, cache_info
+>>>>>>> upstream/main
 
     @staticmethod
     def load(  # type: ignore[no-untyped-def]
@@ -1402,12 +1454,27 @@ class FxGraphCache:
         """
         assert local or remote, "at least one of them needs to be enabled"
         compiled_graph = None
+<<<<<<< HEAD
+        cache_state = None
+        cache_event_time = None
+        cache_info: Dict[str, Any] = {}
+        try:
+            FxGraphCache._check_can_cache(gm)
+            key, debug_lines = compiled_fx_graph_hash(
+                gm, example_inputs, fx_kwargs, inputs_to_check
+            )
+            cache_info["key"] = key
+            cache_info["components"] = debug_lines
+
+            remote_cache: Optional[RemoteCacheBackend] = None
+=======
         remote_cache = None
         (key_info, cache_info) = FxGraphCache.prepare_key(
             gm, example_inputs, fx_kwargs, inputs_to_check, remote
         )
         if key_info is not None:
             key, debug_lines = key_info
+>>>>>>> upstream/main
             if remote:
                 remote_cache = FxGraphCache.get_remote_cache()
             compiled_graph, cache_info = FxGraphCache.load_with_key(
@@ -1419,6 +1486,55 @@ class FxGraphCache:
                 is_backward=fx_kwargs.get("is_backward", False),
             )
 
+<<<<<<< HEAD
+            if compiled_graph is None:
+                log.debug("fx graph cache miss for key %s", key)
+                counters["inductor"]["fxgraph_cache_miss"] += 1
+                cache_state = "miss"
+                start_time = time_ns()
+                cache_event_time = start_time
+                compiled_graph = compile_fx_fn(
+                    gm, example_inputs, inputs_to_check, fx_kwargs
+                )
+                compiled_graph._time_taken_ns = time_ns() - start_time
+                cache_info["time_taken_ns"] = compiled_graph._time_taken_ns
+                FxGraphCache._save_graph(
+                    key,
+                    compiled_graph,
+                    example_inputs,
+                    local,
+                    remote_cache,
+                )
+            else:
+                log.debug("fx graph cache hit for key %s", key)
+                counters["inductor"]["fxgraph_cache_hit"] += 1
+                cache_state = "hit"
+                cache_event_time = time_ns()
+                if (time_saved_ns := compiled_graph._time_taken_ns) is not None:
+                    cache_info["time_saved_ns"] = time_saved_ns
+                    if (
+                        ephemeral_increase := add_ephemeral_timeout_increase_for_distributed(
+                            time_saved_ns
+                        )
+                    ) != 0:
+                        cache_info["ephemeral_timeout_increase"] = ephemeral_increase
+            compiled_graph._fx_graph_cache_key = key
+        except BypassFxGraphCache as e:
+            counters["inductor"]["fxgraph_cache_bypass"] += 1
+            cache_state = "bypass"
+            log.info("Bypassing FX Graph Cache because '%s'", e)
+            cache_info["cache_bypass_reason"] = str(e)
+            cache_event_time = time_ns()
+            if not compiled_graph:
+                compiled_graph = compile_fx_fn(
+                    gm, example_inputs, inputs_to_check, fx_kwargs
+                )
+        assert compiled_graph is not None
+        cache_info["cache_state"] = cache_state
+        chromium_log = get_chromium_event_logger()
+        chromium_log.log_instant_event(
+            f"fx_graph_cache_{cache_state}", cache_event_time, metadata=cache_info
+=======
         # CACHE BYPASS: Compile the graph, don't save it to the cache
         if cache_info["cache_state"] == "bypass":
             assert compiled_graph is None
@@ -1466,6 +1582,7 @@ class FxGraphCache:
             f"fx_graph_cache_{cache_state}",
             cache_info["cache_event_time"],
             metadata=cache_info,
+>>>>>>> upstream/main
         )
         torch._logging.trace_structured(
             "artifact",

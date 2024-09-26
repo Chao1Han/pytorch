@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import functools
+<<<<<<< HEAD
+=======
 import logging
 import os
 from enum import Enum
+>>>>>>> upstream/main
 from typing import List, Optional
 
 from torch import dtype as torch_dtype
@@ -49,14 +52,31 @@ class IntermediateValueDebuggingLevel(Enum):
 
 
 class DebugPrinterManager:
+    DEBUG_FILTER_DEFAULT_PRINT_ALL = "default"
+
     def __init__(
         self,
+<<<<<<< HEAD
+        enable_debug_printer: bool,
+        args_to_print: Optional[List[str]] = None,
+=======
         debug_printer_level,
         args_to_print_or_save: Optional[List[str]] = None,
+>>>>>>> upstream/main
         kernel_name: str = "",
         kernel=None,
         arg_signatures: Optional[List[type]] = None,
     ):
+<<<<<<< HEAD
+        self.enable_debug_printer = enable_debug_printer
+        if args_to_print is None:
+            args_to_print = []
+        self.args_to_print = args_to_print
+        self.kernel_name = kernel_name
+        self.arg_signatures: Optional[List[type]] = None
+        self.kernel = kernel
+        self.filtered_kernel_names_to_print = self.get_debug_filtered_kernel_names()
+=======
         self.debug_printer_level = IntermediateValueDebuggingLevel(debug_printer_level)
         if args_to_print_or_save is None:
             args_to_print_or_save = []
@@ -65,6 +85,7 @@ class DebugPrinterManager:
         self.arg_signatures: Optional[List[type]] = None
         self.kernel = kernel
         self.filtered_kernel_names_to_print = self._get_debug_filtered_kernel_names()
+>>>>>>> upstream/main
 
     def __enter__(self):
         self._perform_debug_print_or_save_helper(
@@ -96,6 +117,35 @@ class DebugPrinterManager:
             self.codegen_intermediate_tensor_value_save(
                 self.args_to_print_or_save,
                 self.kernel_name,
+<<<<<<< HEAD
+                before_launch=True,
+                arg_signatures=self.arg_signatures,
+            )
+
+    def __exit__(self, args_to_print, kernel_name, arg_signatures):
+        if self.enable_debug_printer:
+            self.codegen_intermediate_tensor_value_printer(
+                self.args_to_print,
+                self.kernel_name,
+                before_launch=False,
+                arg_signatures=self.arg_signatures,
+            )
+
+    def set_printer_args(
+        self,
+        args_to_print: List[str],
+        kernel_name: str,
+        arg_signatures: Optional[List[type]],
+        kernel,
+    ):
+        self.args_to_print = args_to_print
+        self.kernel_name = kernel_name
+        self.arg_signatures = arg_signatures
+        self.kernel = kernel
+
+    @functools.lru_cache  # noqa: B019
+    def get_debug_filtered_kernel_names(self) -> List[str]:
+=======
                 before_launch,
                 arg_signatures=self.arg_signatures,
             )
@@ -122,6 +172,7 @@ class DebugPrinterManager:
     def _get_debug_filtered_kernel_names(self) -> List[str]:
         if config.aot_inductor.filtered_kernel_names is None:
             return []
+>>>>>>> upstream/main
         return [
             x.strip()
             for x in config.aot_inductor.filtered_kernel_names.lower().split(",")
@@ -163,9 +214,22 @@ class DebugPrinterManager:
         before_launch=True,
         arg_signatures: Optional[List[type]] = None,
     ) -> None:
+<<<<<<< HEAD
+        for i, arg in enumerate(args_to_print):
+            if arg_signatures is not None and not isinstance(
+                arg_signatures[i], TensorArg
+            ):
+                continue
+            if (
+                len(self.filtered_kernel_names_to_print) > 0
+                and self.filtered_kernel_names_to_print[0]
+                != self.DEBUG_FILTER_DEFAULT_PRINT_ALL
+                and kernel_name not in self.filtered_kernel_names_to_print
+=======
         for i, arg in enumerate(args_to_save):
             if arg_signatures is not None and not isinstance(
                 arg_signatures[i], torch_dtype
+>>>>>>> upstream/main
             ):
                 # infer from the arg data type (has torch.dtype) to see if it is a tensor type
                 continue
@@ -173,6 +237,8 @@ class DebugPrinterManager:
             if V.graph.cpp_wrapper:
                 if config.abi_compatible:
                     V.graph.wrapper_code.writeline(
+<<<<<<< HEAD
+=======
                         f'aoti_torch_save_tensor_handle({arg}, "{arg}", "{launch_prefix}", "{kernel_name}");'
                     )
                 else:
@@ -231,18 +297,24 @@ class DebugPrinterManager:
                 # check if filtered kernel name list is provided
                 if (
                     len(self.filtered_kernel_names_to_print) > 0
-                    and kernel_name not in self.filtered_kernel_names_to_print
+                    and kernel_name.lower() not in self.filtered_kernel_names_to_print
                 ):
                     continue
 
                 if config.abi_compatible:
                     V.graph.wrapper_code.writeline(
+>>>>>>> upstream/main
                         f'aoti_torch_print_tensor_handle({arg}, "{launch_prefix} - {kernel_name} - {arg}");'
                     )
                 else:
                     # TODO: add non-abi compatible mode debug printing info
                     pass
             else:
+<<<<<<< HEAD
+                line = f"print('{launch_prefix} - {kernel_name} - {arg}', {arg})"
+                V.graph.wrapper_code.writeline(line)
+=======
                 V.graph.wrapper_code.writeline(
                     f'_print_debugging_tensor_value_info("inductor: {launch_prefix} - {kernel_name} - {arg}", {arg})'
                 )
+>>>>>>> upstream/main

@@ -21,6 +21,9 @@ from torch.distributed.tensor._ops.utils import expand_to_full_mesh_op_strategy
 __all__ = ["register_sharding"]
 
 
+__all__ = ["register_sharding"]
+
+
 def register_sharding(op: Union[OpOverload, List[OpOverload]]):
     """
     :meth:`register_sharding` is an experimental API that allows users to register sharding

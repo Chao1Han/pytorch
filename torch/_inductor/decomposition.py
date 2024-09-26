@@ -651,10 +651,17 @@ def wrapped_quantized_linear(
     out_zero_point: torch.Tensor,
     out_channel: int,
 ) -> torch.Tensor:
+<<<<<<< HEAD
+    packed_weight = torch.ops._quantized.wrapped_linear_prepack(
+        weight, weight_scale, weight_zero_point, bias
+    )
+    return torch.ops._quantized.wrapped_quantized_linear_prepacked(
+=======
     packed_weight = torch.ops._quantized._wrapped_linear_prepack(
         weight, weight_scale, weight_zero_point, bias
     )
     return torch.ops._quantized._wrapped_quantized_linear_prepacked(
+>>>>>>> upstream/main
         input,
         input_scale,
         input_zero_point,

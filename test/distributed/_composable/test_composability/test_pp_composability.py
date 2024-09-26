@@ -249,6 +249,8 @@ class ComposabilityTest(MultiProcessTestCase):
 
         torch.distributed.destroy_process_group()
 
+        torch.distributed.destroy_process_group()
+
 
 instantiate_parametrized_tests(ComposabilityTest)
 

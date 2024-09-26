@@ -8,6 +8,8 @@ import unittest
 from typing import Any, List, Optional, Tuple, Union
 
 import torch
+import intel_extension_for_pytorch
+import oneccl_bindings_for_pytorch
 import torch.distributed as dist
 import torch.nn as nn
 from torch.distributed._composable.fsdp import fully_shard, MixedPrecisionPolicy
@@ -24,8 +26,16 @@ from torch.testing._internal.common_utils import run_tests
 from torch.testing._internal.two_tensor import TwoTensor
 
 
-def two_tensor_fsdp_pre_all_gather(
+def two_tensor_fsdp_pre_all_gather_v1(
     self, mesh: DeviceMesh
+) -> Tuple[Tuple[torch.Tensor, ...], Any]:
+    all_gather_inputs = (self.a, self.b)
+    metadata = None
+    return all_gather_inputs, metadata
+
+
+def two_tensor_fsdp_pre_all_gather_v2(
+    self, mesh: DeviceMesh, module: nn.Module, mp_policy: MixedPrecisionPolicy
 ) -> Tuple[Tuple[torch.Tensor, ...], Any]:
     all_gather_inputs = (self.a, self.b)
     metadata = None
@@ -66,9 +76,12 @@ class TestFullyShardAllGatherExtensionsCommon:
         return 2
 
     @contextlib.contextmanager
-    def _patch_two_tensor_fsdp_all_gather(self):
+    def _patch_two_tensor_fsdp_all_gather(self, pre_all_gather_version: int):
         lock = threading.Lock()
-        TwoTensor.fsdp_pre_all_gather = two_tensor_fsdp_pre_all_gather
+        if pre_all_gather_version == 1:
+            TwoTensor.fsdp_pre_all_gather = two_tensor_fsdp_pre_all_gather_v1
+        elif pre_all_gather_version == 2:
+            TwoTensor.fsdp_pre_all_gather = two_tensor_fsdp_pre_all_gather_v2
         TwoTensor.fsdp_post_all_gather = two_tensor_fsdp_post_all_gather
         dist.barrier()
         try:
@@ -100,7 +113,12 @@ class TestFullyShardAllGatherExtensionsMultiProcess(
 ):
     @skip_if_lt_x_gpu(2)
     def test_all_gather_extensions_train_parity(self):
-        with self._patch_two_tensor_fsdp_all_gather():
+        with self._patch_two_tensor_fsdp_all_gather(pre_all_gather_version=1):
+            self.run_subtests(
+                {"reshard_after_forward": [True, False]},
+                self._test_all_gather_extensions_train_parity,
+            )
+        with self._patch_two_tensor_fsdp_all_gather(pre_all_gather_version=2):
             self.run_subtests(
                 {"reshard_after_forward": [True, False]},
                 self._test_all_gather_extensions_train_parity,
@@ -109,7 +127,7 @@ class TestFullyShardAllGatherExtensionsMultiProcess(
     def _test_all_gather_extensions_train_parity(self, reshard_after_forward: bool):
         torch.manual_seed(42)
         model = self._init_two_tensor_mlp()
-        ref_model = copy.deepcopy(model).cuda()
+        ref_model = copy.deepcopy(model).xpu()
         ref_optim = torch.optim.Adam(ref_model.parameters(), lr=1e-2, foreach=True)
         fully_shard_fn = functools.partial(
             fully_shard, reshard_after_forward=reshard_after_forward
@@ -121,7 +139,7 @@ class TestFullyShardAllGatherExtensionsMultiProcess(
         check_sharded_parity(self, ref_model, model)
 
         torch.manual_seed(42 + self.rank + 1)
-        inp = torch.randn((2, 8), device="cuda")
+        inp = torch.randn((2, 8), device="xpu")
         for iter_idx in range(10):
             losses: List[torch.Tensor] = []
             for _model in (ref_model, model):
@@ -144,11 +162,15 @@ class TestFullyShardAllGatherExtensionsMultiThread(
 ):
     @property
     def device(self) -> torch.device:
-        return torch.device("cuda:0")
+        return torch.device("xpu:0")
 
-    @unittest.skipIf(not TEST_CUDA, "no cuda")
     def test_all_gather_extensions_end_to_end(self):
-        with self._patch_two_tensor_fsdp_all_gather():
+        with self._patch_two_tensor_fsdp_all_gather(pre_all_gather_version=1):
+            self.run_subtests(
+                {"reshard_after_forward": [True, False]},
+                self._test_all_gather_extensions_end_to_end,
+            )
+        with self._patch_two_tensor_fsdp_all_gather(pre_all_gather_version=2):
             self.run_subtests(
                 {"reshard_after_forward": [True, False]},
                 self._test_all_gather_extensions_end_to_end,
@@ -175,19 +197,28 @@ class TestFullyShardAllGatherExtensionsMultiThread(
 
         # Run a few iterations to check for errors
         torch.manual_seed(42 + self.rank + 1)
-        inp = torch.randn((2, 8), device="cuda")
+        inp = torch.randn((2, 8), device="xpu")
         for _ in range(3):
             model(inp).sum().backward()
             optim.step()
             optim.zero_grad()
 
-    @unittest.skipIf(not TEST_CUDA, "no cuda")
     def test_all_gather_extensions_monkey_patch(self):
+        from torch.autograd.grad_mode import _unsafe_preserve_version_counter
+
+        tls = threading.local()
+        tls.ran_pre_all_gather = False
+
         # Define a pre/post-all-gather pair that quantizes to bf16 for the
         # all-gather and de-quantizes back to the parameter dtype
-        def fsdp_pre_all_gather(self) -> Tuple[Tuple[torch.Tensor, ...], Any]:
+        def fsdp_pre_all_gather(
+            self, mesh: DeviceMesh, module: nn.Module, mp_policy: MixedPrecisionPolicy
+        ) -> Tuple[Tuple[torch.Tensor, ...], Any]:
+            nonlocal tls
+            tls.ran_pre_all_gather = True
             return (self.to(torch.bfloat16),), None
 
+        @torch.no_grad()
         def fsdp_post_all_gather(
             self,
             all_gather_outputs: Tuple[torch.Tensor, ...],
@@ -200,7 +231,8 @@ class TestFullyShardAllGatherExtensionsMultiThread(
             assert metadata is None, f"{metadata}"
             assert tensor.dtype == torch.bfloat16, f"{tensor.dtype}"
             if out is not None:
-                out.copy_(tensor)
+                with _unsafe_preserve_version_counter(out):
+                    out.copy_(tensor)
                 return
             return tensor.to(param_dtype), (tensor,)
 
@@ -217,20 +249,26 @@ class TestFullyShardAllGatherExtensionsMultiThread(
         self.assertGreater(sum("weight" in n for n, _ in model.named_parameters()), 0)
         for param_name, param in model.named_parameters():
             if "weight" in param_name:
-                local_param = param.to_local()
-                # Monkey patch on the `torch.Tensor` to show that the extension
-                # can work even without a subclass
-                local_param.fsdp_pre_all_gather = fsdp_pre_all_gather
-                local_param.fsdp_post_all_gather = fsdp_post_all_gather
+                # Need to use `_local_tensor` to patch the tensor object
+                local_param = param._local_tensor
+                # Monkey patch on the `torch.Tensor` as instance methods to
+                # show that the extension can work even without a subclass
+                local_param.fsdp_pre_all_gather = fsdp_pre_all_gather.__get__(
+                    local_param
+                )
+                local_param.fsdp_post_all_gather = fsdp_post_all_gather.__get__(
+                    local_param
+                )
         optim = torch.optim.Adam(model.parameters(), lr=1e-2, foreach=True)
 
         # Run a few iterations to check for errors
         torch.manual_seed(42 + self.rank + 1)
-        inp = torch.randn((2, 8), device="cuda")
+        inp = torch.randn((2, 8), device="xpu")
         for _ in range(3):
             model(inp).sum().backward()
             optim.step()
             optim.zero_grad()
+        assert tls.ran_pre_all_gather
 
 
 if __name__ == "__main__":

@@ -3,6 +3,8 @@
 import sys
 
 import torch
+import intel_extension_for_pytorch
+import oneccl_bindings_for_pytorch
 import torch.distributed.fsdp._traversal_utils as traversal_utils
 from torch import distributed as dist
 from torch.distributed.fsdp import (
@@ -106,7 +108,7 @@ class TestPureFP16(FSDPTest):
         )
         fsdp_kwargs = {
             "use_orig_params": use_orig_params,
-            "device_id": torch.cuda.current_device(),
+            "device_id": torch.xpu.current_device(),
             "mixed_precision": mixed_precision,
         }
         if to_half_before_fsdp_init:
@@ -118,7 +120,7 @@ class TestPureFP16(FSDPTest):
             self.assertEqual(param.dtype, torch.float16)
         inp = tuple(
             t.half() if torch.is_tensor(t) else t
-            for t in fsdp_model.module.get_input(torch.device("cuda"))
+            for t in fsdp_model.module.get_input(torch.device("xpu"))
         )
         out = fsdp_model(*inp)
         out.sum().backward()

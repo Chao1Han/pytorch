@@ -23,6 +23,7 @@ from torch.testing._internal.common_distributed import (
     requires_nccl,
     skip_if_lt_x_gpu,
     with_dist_debug_levels,
+    requires_cuda,
 )
 from torch.testing._internal.common_utils import run_tests, TEST_WITH_DEV_DBG_ASAN
 
@@ -438,24 +439,28 @@ class ProcessGroupGlooWrapperTest(AbstractProcessGroupWrapperTest):
         pg = self._create_wrapper_pg(with_new_group=False)
         self._test_collective_shape_mismatch(pg)
 
+    @requires_cuda()
     @skip_if_lt_x_gpu(4)
     @with_dist_debug_levels(levels=["DETAIL"])
     def test_collectives_op_mismatch_cuda_debug_mode(self):
         pg = self._create_wrapper_pg(with_new_group=True)
         self._test_collectives_op_mismatch(pg, use_cuda=True)
 
+    @requires_cuda()
     @skip_if_lt_x_gpu(4)
     @with_dist_debug_levels(levels=["OFF"])
     def test_collectives_op_mismatch_cuda(self):
         pg = self._create_wrapper_pg(with_new_group=False)
         self._test_collectives_op_mismatch(pg, use_cuda=True)
 
+    @requires_cuda()
     @skip_if_lt_x_gpu(4)
     @with_dist_debug_levels(levels=["DETAIL"])
     def test_collective_shape_mismatch_cuda_debug_mode(self):
         pg = self._create_wrapper_pg(with_new_group=True)
         self._test_collective_shape_mismatch(pg, use_cuda=True)
 
+    @requires_cuda()
     @skip_if_lt_x_gpu(4)
     @with_dist_debug_levels(levels=["OFF"])
     def test_collective_shape_mismatch_cuda(self):

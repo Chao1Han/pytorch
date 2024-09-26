@@ -158,7 +158,10 @@ def _zero_model(
 
 def _get_state_dict(model, cpu_offload=False, half=False):
     if not cpu_offload:
-        model = model.cuda()
+        if torch.cuda.is_available():
+            model = model.cuda()
+        else:
+            model = model.xpu()
     if half:
         model.half()
 
@@ -184,7 +187,10 @@ def _broadcast_state_dict(rank, state_dict):
     state_dict = olist[0]
     # Ensure that the state is on CUDA
     for param_name in state_dict.keys():
-        state_dict[param_name] = state_dict[param_name].cuda()
+        if torch.xpu.is_available():
+            state_dict[param_name] = state_dict[param_name].xpu()
+        else:
+            state_dict[param_name] = state_dict[param_name].cuda()
     return state_dict
 
 
@@ -201,9 +207,15 @@ def get_full_params(model: nn.Module, recurse: bool = True):
     with FSDP.summon_full_params(model, recurse=recurse):
         return deepcopy(list(model.parameters()))
 
-
-def _maybe_cuda(model: nn.Module, move_to_cuda: bool):
-    return model.cuda() if move_to_cuda else model
+def _maybe_device(model: nn.Module, move_to_device: bool):
+    if move_to_device:
+        if torch.cuda.is_available():
+            return model.cuda()
+        elif torch.xpu.is_available():
+            return model.xpu()
+    return model
+# def _maybe_cuda(model: nn.Module, move_to_cuda: bool):
+#     return model.cuda() if move_to_cuda else model
 
 
 def _maybe_wrap_fsdp(model: nn.Module, wrap_fsdp: bool, *args, **kwargs):
@@ -272,7 +284,10 @@ class TransformerWithSharedParams(FSDPTestModel):
         self.bs = 2
         self.bn = torch.nn.BatchNorm1d(self.bs) if add_bn else torch.nn.Identity()
         if cuda_init_mode == CUDAInitMode.CUDA_BEFORE:
-            self = self.cuda()
+            if torch.xpu.is_available():
+                self = self.xpu()
+            else:
+                self = self.cuda()
         if deterministic:
             self.eval()
 
@@ -373,7 +388,10 @@ class TransformerWithSharedParams(FSDPTestModel):
                 **fsdp_kwargs,
             )
             if cuda_init_mode == CUDAInitMode.CUDA_AFTER:
-                fsdp_model = fsdp_model.cuda()
+                if torch.xpu.is_available():
+                    fsdp_model = fsdp_model.xpu()
+                else:
+                    fsdp_model = fsdp_model.cuda()
             return fsdp_model
         raise ValueError(f"Unsupported FSDP init mode: {fsdp_init_mode}")
 
@@ -403,15 +421,15 @@ class NestedWrappedModule(FSDPTestModel):
         if deterministic:
             torch.manual_seed(0)
         self.module = nn.Sequential(
-            _maybe_cuda(nn.Linear(8, 4), move_to_cuda),
+            _maybe_device(nn.Linear(8, 4), move_to_cuda),
             _maybe_wrap(
                 nn.Sequential(
-                    _maybe_wrap(_maybe_cuda(nn.Linear(4, 16), move_to_cuda)),
-                    _maybe_cuda(nn.Linear(16, 16), move_to_cuda),
+                    _maybe_wrap(_maybe_device(nn.Linear(4, 16), move_to_cuda)),
+                    _maybe_device(nn.Linear(16, 16), move_to_cuda),
                 ),
             ),
-            _maybe_wrap(_maybe_cuda(nn.Linear(16, 4), move_to_cuda)),
-            _maybe_cuda(nn.Linear(4, 8), move_to_cuda),
+            _maybe_wrap(_maybe_device(nn.Linear(16, 4), move_to_cuda)),
+            _maybe_device(nn.Linear(4, 8), move_to_cuda),
         )
 
     def get_input(self, device):
@@ -470,7 +488,10 @@ class NestedWrappedModule(FSDPTestModel):
                 **fsdp_kwargs,
             )
             if cuda_init_mode == CUDAInitMode.CUDA_AFTER:
-                fsdp_model = fsdp_model.cuda()
+                if torch.xpu.is_available():
+                    fsdp_model = fsdp_model.xpu()
+                else:
+                    fsdp_model = fsdp_model.cuda()
             return fsdp_model
         raise ValueError(f"Unsupported FSDP init mode: {fsdp_init_mode}")
 
@@ -505,7 +526,10 @@ class AlwaysWrapNestedWrappedModule(NestedWrappedModule):
             fsdp_kwargs = fsdp_kwargs or {}
             fsdp_model = FSDP(model, auto_wrap_policy=always_wrap_policy, **fsdp_kwargs)
             if cuda_init_mode == CUDAInitMode.CUDA_AFTER:
-                fsdp_model = fsdp_model.cuda()
+                if torch.xpu.is_available():
+                    fsdp_model = fsdp_model.xpu()
+                else:
+                    fsdp_model = fsdp_model.cuda()
             return fsdp_model
 
 
@@ -537,17 +561,17 @@ class NonUniformReqGradNWM(NestedWrappedModule):
         if deterministic:
             torch.manual_seed(0)
         self.module = nn.Sequential(
-            _maybe_cuda(nn.Linear(8, 4), move_to_cuda),
+            _maybe_device(nn.Linear(8, 4), move_to_cuda),
             _maybe_wrap(
                 nn.Sequential(
-                    _maybe_wrap(_maybe_cuda(nn.Linear(4, 16), move_to_cuda)),
-                    _maybe_cuda(nn.Linear(16, 16), move_to_cuda),
+                    _maybe_wrap(_maybe_device(nn.Linear(4, 16), move_to_cuda)),
+                    _maybe_device(nn.Linear(16, 16), move_to_cuda),
                 ),
             ),
             _maybe_wrap(
                 nn.Sequential(
-                    _maybe_cuda(nn.Linear(16, 4), move_to_cuda),
-                    _maybe_cuda(nn.Linear(4, 8), move_to_cuda),
+                    _maybe_device(nn.Linear(16, 4), move_to_cuda),
+                    _maybe_device(nn.Linear(4, 8), move_to_cuda),
                 ),
             ),
         )
@@ -599,7 +623,10 @@ class NonUniformReqGradNWM(NestedWrappedModule):
                 **fsdp_kwargs,
             )
             if cuda_init_mode == CUDAInitMode.CUDA_AFTER:
-                fsdp_model = fsdp_model.cuda()
+                if torch.xpu.is_available():
+                    fsdp_model = fsdp_model.xpu()
+                else:
+                    fsdp_model = fsdp_model.cuda()
             NonUniformReqGradNWM._set_nonuniform_req_grad(fsdp_model, req_grad_pattern)
             return fsdp_model
         raise ValueError(f"Unsupported FSDP init mode: {fsdp_init_mode}")
@@ -628,7 +655,7 @@ class ModuleWithDelay(FSDPTestModel):
 
     def get_loss(self, input, output):
         loss = self.module.get_loss(input, output)
-        if self.delay_after_loss_ms > 0:
+        if self.delay_after_loss_ms > 0 and torch.cuda.is_available():
             torch.cuda._sleep(int(self.delay_after_loss_ms * get_cycles_per_ms()))
         return loss
 
@@ -636,7 +663,7 @@ class ModuleWithDelay(FSDPTestModel):
         orig_reduce_scatter = torch.distributed.reduce_scatter_tensor
 
         def _delayed_reduce_scatter(*args, **kwargs):
-            if self.delay_before_reduction_ms > 0:
+            if self.delay_before_reduction_ms > 0 and torch.cuda.is_available():
                 torch.cuda._sleep(
                     int(self.delay_before_reduction_ms * get_cycles_per_ms())
                 )
@@ -733,9 +760,9 @@ class MixtureOfExperts(NestedWrappedModule):
         d_expert = 23
         d_shared = 12
         d_input = 8
-        expert = _maybe_cuda(nn.Linear(d_expert, d_shared), self.move_to_cuda)
+        expert = _maybe_device(nn.Linear(d_expert, d_shared), self.move_to_cuda)
 
-        self.num_expert_params = sum(p.numel() for p in expert.parameters())
+        self.num_expert_params = sum([p.numel() for p in expert.parameters()])
         for p in expert.parameters():
             p.expert = True  # type: ignore[attr-defined]
 
@@ -743,7 +770,7 @@ class MixtureOfExperts(NestedWrappedModule):
             # Keep all other parameters the same across ranks
             torch.manual_seed(0)
 
-        shared = _maybe_cuda(nn.Linear(d_shared, d_expert), self.move_to_cuda)
+        shared = _maybe_device(nn.Linear(d_shared, d_expert), self.move_to_cuda)
 
         if wrap_fsdp:
             # we create a process group of size 1 for the expert params
@@ -754,10 +781,10 @@ class MixtureOfExperts(NestedWrappedModule):
             shared = FSDP(shared, group, **fsdp_kwargs)  # type: ignore[assignment]
 
         self.module = nn.Sequential(
-            _maybe_cuda(nn.Linear(d_input, d_shared), self.move_to_cuda),
+            _maybe_device(nn.Linear(d_input, d_shared), self.move_to_cuda),
             shared,
             expert,
-            _maybe_cuda(nn.Linear(d_shared, d_input), self.move_to_cuda),
+            _maybe_device(nn.Linear(d_shared, d_input), self.move_to_cuda),
         )
 
     def forward(self, x):
@@ -767,9 +794,10 @@ class MixtureOfExperts(NestedWrappedModule):
                 orig_reshard = torch.distributed.fsdp._runtime_utils._reshard
 
                 def _delayed_reshard(*args, **kwargs):
-                    torch.cuda._sleep(
-                        int(self.delay_before_free_ms * get_cycles_per_ms())
-                    )
+                    if torch.cuda.is_available():
+                        torch.cuda._sleep(
+                            int(self.delay_before_free_ms * get_cycles_per_ms())
+                        )
                     return orig_reshard(*args, **kwargs)
 
                 # This patch covers any `import torch..._reshard` uses.
@@ -839,7 +867,10 @@ class MixtureOfExperts(NestedWrappedModule):
                 **fsdp_kwargs,
             )
             if cuda_init_mode == CUDAInitMode.CUDA_AFTER:
-                fsdp_model = fsdp_model.cuda()
+                if torch.xpu.is_available():
+                    fsdp_model = fsdp_model.xpu()
+                else:
+                    fsdp_model = fsdp_model.cuda()
             return fsdp_model
         raise ValueError(f"Unsupported FSDP init mode: {fsdp_init_mode}")
 
@@ -1091,7 +1122,10 @@ def check_sharded_parity(
 class FSDPTestMultiThread(MultiThreadedTestCase):
     @property
     def world_size(self):
-        return torch.cuda.device_count() if torch.cuda.is_available() else 4
+        if torch.xpu.is_available():
+            return torch.xpu.device_count()
+        else:
+            return torch.cuda.device_count() if torch.cuda.is_available() else 4
 
     def setUp(self):
         super().setUp()
@@ -1118,7 +1152,12 @@ class FSDPTest(MultiProcessTestCase):
 
     @property
     def world_size(self):
-        return min(torch.cuda.device_count(), 8) if torch.cuda.is_available() else 4
+        if torch.cuda.is_available():
+            return min(torch.cuda.device_count(), 8)
+        elif torch.xpu.is_available():
+            return min(torch.xpu.device_count(), 8)
+        else:
+            return 4
 
     @property
     def process_group(self):
@@ -1151,7 +1190,12 @@ class FSDPTest(MultiProcessTestCase):
 
         # Specify gloo backend to make 'init_process_group()' succeed,
         # Actual tests will be skipped if there is no enough GPUs.
-        backend = "nccl" if torch.cuda.is_available() else "gloo"
+        if torch.cuda.is_available():
+            backend = "nccl"
+        elif torch.xpu.is_available():
+            backend = "ccl"
+        else:
+            backend = "gloo"
 
         try:
             if fake_pg:
@@ -1179,6 +1223,10 @@ class FSDPTest(MultiProcessTestCase):
         if torch.cuda.is_available() and torch.cuda.device_count():
             device_id = self.rank % torch.cuda.device_count()
             torch.cuda.set_device(device_id)
+            device_ids = [device_id]
+        elif torch.xpu.is_available() and torch.xpu.device_count():
+            device_id = self.rank % torch.xpu.device_count()
+            torch.xpu.set_device(device_id)
             device_ids = [device_id]
 
         # Execute barrier prior to running test to ensure that every process
@@ -1220,9 +1268,13 @@ class FSDPTest(MultiProcessTestCase):
         optim = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9)
         for _ in range(num_steps):
             optim.zero_grad()
-            with torch.amp.autocast("cuda", enabled=autocast):
+            if torch.cuda.is_available():
+                autocast_device = "cuda"
+            else:
+                autocast_device = "xpu"
+            with torch.amp.autocast(autocast_device, enabled=autocast):
                 # Inputs always cuda regardless of cpu offloading, or model.device
-                input = model.module.get_input(torch.device("cuda"))
+                input = model.module.get_input(torch.device(autocast_device))
                 if use_pure_fp16 or (mixed_precision and not isinstance(model, FSDP)):
                     if isinstance(input, torch.Tensor):
                         input = input.half()
@@ -1379,7 +1431,10 @@ class FSDPTest(MultiProcessTestCase):
             # Change the model parameter dtype after FSDP initialization
             fsdp_model = fsdp_model.half()
         if cuda_init_mode == CUDAInitMode.CUDA_AFTER:
-            fsdp_model = fsdp_model.cuda()
+            if torch.xpu.is_available():
+                fsdp_model = fsdp_model.xpu()
+            else:
+                fsdp_model = fsdp_model.cuda()
         offload_params = cpu_offload is not None and cpu_offload.offload_params
         # Offloading parameters with `CUDA_AFTER` should raise an error during
         # lazy initialization due to the parameter devices not being CPU;
@@ -1398,7 +1453,7 @@ class FSDPTest(MultiProcessTestCase):
             self.assertRaisesRegex(
                 RuntimeError,
                 "An FSDP-managed module with parameter CPU offloading enabled "
-                "has parameters on cuda",
+                "has parameters on xpu",
             )
             if expects_device_error
             else nullcontext()
@@ -1425,7 +1480,10 @@ class FSDPTest(MultiProcessTestCase):
             cpu_device = torch.device("cpu")
             for param in fsdp_model.parameters():
                 self.assertEqual(param.device, cpu_device)
-            fsdp_loss = fsdp_loss.cuda()
+            if torch.xpu.is_available():
+                fsdp_loss = fsdp_loss.xpu()
+            else:
+                fsdp_loss = fsdp_loss.cuda()
         fsdp_unsharded_params = get_full_params(fsdp_model)
         # Do not check dtype since the reference DDP loss may not be the same
         # dtype as the FSDP loss in the case of mixed precision
@@ -1510,9 +1568,15 @@ class NestedLinear(nn.Module):
     def __init__(self, fsdp_wrap):
         super().__init__()
         if fsdp_wrap:
-            self.nested_linear = wrap(nn.Linear(10, 10, bias=False).cuda())
+            if torch.xpu.is_available():
+                self.nested_linear = wrap(nn.Linear(10, 10, bias=False).xpu())
+            else:
+                self.nested_linear = wrap(nn.Linear(10, 10, bias=False).cuda())
         else:
-            self.nested_linear = nn.Linear(10, 10, bias=False).cuda()
+            if torch.xpu.is_available():
+                self.nested_linear = nn.Linear(10, 10, bias=False).xpu()
+            else:
+                self.nested_linear = nn.Linear(10, 10, bias=False).cuda()
 
     def forward(self, x):
         return self.nested_linear(x)
@@ -1521,9 +1585,14 @@ class NestedLinear(nn.Module):
 class SkipModel(nn.Module):
     def __init__(self, double_nest):
         super().__init__()
-        self.linear = nn.Linear(10, 10, bias=False).cuda()
-        self.linear_skip = SkipModule().cuda()
-        self.nested_linear = wrap(NestedLinear(fsdp_wrap=double_nest))
+        if torch.xpu.is_available():
+            self.linear = nn.Linear(10, 10, bias=False).xpu()
+            self.linear_skip = SkipModule().xpu()
+            self.nested_linear = wrap(NestedLinear(fsdp_wrap=double_nest))
+        else:
+            self.linear = nn.Linear(10, 10, bias=False).cuda()
+            self.linear_skip = SkipModule().cuda()
+            self.nested_linear = wrap(NestedLinear(fsdp_wrap=double_nest))
 
     def forward(self, x):
         x = self.linear(x)

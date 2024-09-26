@@ -7,15 +7,17 @@ from pprint import pformat
 from typing import NamedTuple
 
 import torch
+import intel_extension_for_pytorch
+import oneccl_bindings_for_pytorch
 from torch.distributed._tensor import (
     DeviceMesh,
     distribute_module,
     distribute_tensor,
     DTensor,
 )
+from torch.distributed._tensor.debug import CommDebugMode
+from torch.distributed._tensor.ops.utils import is_tensor_partial, normalize_dim
 from torch.distributed._tensor.placement_types import Replicate, Shard
-from torch.distributed.tensor._ops.utils import is_tensor_partial, normalize_dim
-from torch.distributed.tensor.debug import CommDebugMode
 from torch.distributed.tensor.parallel import (
     ColwiseParallel,
     parallelize_module,

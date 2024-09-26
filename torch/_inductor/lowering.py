@@ -101,6 +101,13 @@ def maybe_layout_constraints(fn: Callable[..., Any]) -> Optional[Callable[..., A
         _maybe_layout_constraints[fn] = None
         return None
     # We lazily register tag-based layout constraints.
+<<<<<<< HEAD
+    if torch._C.Tag.needs_fixed_stride_order in fn.tags:
+        _maybe_layout_constraints[fn] = constrain_to_fx_strides
+        return _maybe_layout_constraints[fn]
+    _maybe_layout_constraints[fn] = None
+    return None
+=======
 
     def handle_layout_constraint_tag(tag):
         if tag is torch._C.Tag.needs_fixed_stride_order:
@@ -127,6 +134,7 @@ def get_layout_constraint_tag(fn):
     if torch._library.utils.is_builtin(fn):
         return torch._C.Tag.flexible_layout
     return getattr(torch._C.Tag, config.custom_op_default_layout_constraint)
+>>>>>>> upstream/main
 
 
 def assert_nyi(cond, msg):
@@ -2215,8 +2223,6 @@ make_fallback(aten._cdist_forward)  # p=2 should be feasible
 make_fallback(aten._cdist_backward)
 
 # 2) Medium
-make_fallback(aten.max_unpool2d)
-make_fallback(aten.max_unpool3d)
 make_fallback(aten._trilinear)
 
 

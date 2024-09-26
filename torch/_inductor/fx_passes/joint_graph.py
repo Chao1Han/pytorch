@@ -565,7 +565,11 @@ def pointless_view(match: Match, arg, size):
     arg_size = list(node.args[0].meta["val"].shape)  # type: ignore[union-attr]
     if size == arg_size:
         node.replace_all_uses_with(node.args[0])  # type: ignore[arg-type]
+<<<<<<< HEAD
+        match.erase_nodes(graph)
+=======
         match.erase_nodes()
+>>>>>>> upstream/main
 
 
 # When softmax is used with temperature or other scaling, we get the pattern

@@ -26,7 +26,6 @@
 #include <c10/util/generic_math.h>
 #include <c10/util/Half.h>
 #include <c10/util/TypeCast.h>
-#include <torch/csrc/inductor/aoti_torch/c/shim.h>
 
 #if defined(CPU_CAPABILITY_AVX512) || defined(CPU_CAPABILITY_AVX2) || defined(CPU_CAPABILITY_ZVECTOR) || defined(CPU_CAPABILITY_NEON) || defined(CPU_CAPABILITY_VSX)
 #define INDUCTOR_USE_VECTOR_TYPES() 1
@@ -459,7 +458,7 @@ inline at::vec::Vectorized<float> vec_shuffle_down(at::vec::Vectorized<float> x,
   case 4:
     return vec_t(_mm256_permute2f128_ps(x, x, SHUFFLE_MASK(1, 1, 1, 1)));
   }
-  TORCH_CHECK(false, "Unhandled vec_shuffle_down value ", n);
+  throw std::runtime_error("Unhandled vec_shuffle_down value " + std::to_string(n));
 }
 #endif
 
@@ -481,7 +480,7 @@ inline at::vec::Vectorized<float> vec_shuffle_down(at::vec::Vectorized<float> x,
       return vec_t(_mm512_permutexvar_ps(
           _mm512_set_epi32(8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8), x));
   }
-  TORCH_CHECK(false, "Unhandled vec_shuffle_down value ", n);
+  throw std::runtime_error("Unhandled vec_shuffle_down value " + std::to_string(n));
 }
 #endif
 
@@ -645,6 +644,9 @@ void atomic_add_vec(T *addr, at::vec::VectorizedN<int64_t, NI> index, at::vec::V
 }
 #endif
 
+<<<<<<< HEAD
+void mm_get_thread_blocking(
+=======
 std::tuple<std::shared_ptr<int64_t[]>, int> _get_factors(int64_t number) {
   int count = 0;
   for (int64_t i = std::sqrt(number); i > 0; --i) {
@@ -676,6 +678,7 @@ std::tuple<std::shared_ptr<int64_t[]>, int> get_factors(int64_t number) {
 }
 
 void _mm_get_thread_blocking(
+>>>>>>> upstream/main
     int num_threads,
     int max_k_slices,
     int64_t M,
@@ -708,7 +711,11 @@ void _mm_get_thread_blocking(
                               int64_t Mt,
                               int64_t Nt,
                               int64_t Kt) {
+<<<<<<< HEAD
+    return Mt == 0 || Mt_ * Mr + Nt_ * Nr < Mt * Mr + Nt * Nr;
+=======
     return Mt == 0 || Kt_ < Kt || Mt_ * Mr + Nt_ * Nr < Mt * Mr + Nt * Nr;
+>>>>>>> upstream/main
   };
 
   int64_t m_blocks = (M + Mr - 1) / Mr;

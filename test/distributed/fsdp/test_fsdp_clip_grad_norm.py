@@ -5,6 +5,8 @@ import sys
 from typing import Union
 
 import torch
+import intel_extension_for_pytorch
+import oneccl_bindings_for_pytorch
 import torch.nn as nn
 from torch import distributed as dist
 from torch.distributed.fsdp import ShardingStrategy
@@ -62,10 +64,10 @@ class TestClipGradNorm(FSDPTest):
             def forward(self, x: torch.Tensor) -> torch.Tensor:
                 return self.lin2(self.lin1(x))
 
-        model = Model().cuda()
+        model = Model().xpu()
         model.lin2 = FSDP(model.lin2)
         fsdp_model = FSDP(model)
-        fsdp_model(torch.randn((2, 5), device=torch.device("cuda"))).sum().backward()
+        fsdp_model(torch.randn((2, 5), device=torch.device("xpu"))).sum().backward()
         error_regex = "should only be called on the root FSDP instance"
         with self.assertRaisesRegex(RuntimeError, error_regex):
             fsdp_model.lin2.clip_grad_norm_(max_norm=2)
@@ -156,7 +158,7 @@ class TestClipGradNorm(FSDPTest):
         LR = 1e-2
         ddp_optim = torch.optim.Adam(ddp_model.parameters(), lr=LR)
         fsdp_optim = torch.optim.Adam(fsdp_model.parameters(), lr=LR)
-        device = torch.device("cuda")
+        device = torch.device("xpu")
         LARGE_FACTOR = 100
         inp = ddp_model.module.get_input(device)
         for model in (ddp_model, fsdp_model):
@@ -283,7 +285,7 @@ class TestClipGradNorm(FSDPTest):
             ),
             **fsdp_kwargs,
         )
-        inp = fsdp_model.module.get_input(torch.device("cuda"))
+        inp = fsdp_model.module.get_input(torch.device("xpu"))
         out = fsdp_model(*inp)
         out.sum().backward()
         for param in fsdp_model.parameters():
@@ -326,7 +328,7 @@ class TestClipGradNorm(FSDPTest):
             device_id=self.rank,
             use_orig_params=use_orig_params,
         )
-        inp = torch.randn(32, 24, device="cuda")
+        inp = torch.randn(32, 24, device="xpu")
         fsdp_module(inp)
         with self.assertWarnsRegex(
             expected_warning=UserWarning,
@@ -336,7 +338,7 @@ class TestClipGradNorm(FSDPTest):
         ):
             total_norm = fsdp_module.clip_grad_norm_(1)
         self.assertEqual(total_norm.dtype, torch.float32)
-        self.assertEqual(total_norm, torch.tensor(0.0, device="cuda"))
+        self.assertEqual(total_norm, torch.tensor(0.0, device="xpu"))
 
 
 instantiate_parametrized_tests(TestClipGradNorm)

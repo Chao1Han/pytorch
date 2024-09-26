@@ -1401,7 +1401,29 @@ class SIMDScheduling(BaseScheduling):
                     node.mark_run()
 
         self.codegen_comment(node_schedule)
+<<<<<<< HEAD
+
+        # debug printing values of intermediate tensors
+        # Note: MultiKernel debug printing is not supported for now
+        enable_debug_printer = (
+            config.aot_inductor.debug_intermediate_value_printer
+            and not isinstance(final_kernel, MultiKernel)
+        )
+        _, call_args, arg_signatures, _ = (
+            final_kernel.args.python_argdefs()
+            if not isinstance(final_kernel, MultiKernel)
+            else [None, [], None, None]
+        )
+        debug_printer_manager = V.graph.wrapper_code.debug_printer
+        debug_printer_manager.enable_debug_printer = enable_debug_printer
+        debug_printer_manager.set_printer_args(
+            call_args, kernel_name, arg_signatures, final_kernel
+        )
+        with debug_printer_manager:
+            final_kernel.call_kernel(final_kernel.kernel_name)
+=======
         final_kernel.call_kernel(final_kernel.kernel_name)
+>>>>>>> upstream/main
 
         if config.nan_asserts:
             final_kernel.codegen_nan_check()
@@ -1524,7 +1546,19 @@ class SIMDScheduling(BaseScheduling):
             kernel_name = self.define_kernel(src_code, node_schedule, kernel)
 
         self.codegen_comment(node_schedule)
+<<<<<<< HEAD
+
+        # debug printing values of intermediate tensors
+        _, call_args, arg_signatures, _ = kernel.args.python_argdefs()
+        debug_printer_manager = V.graph.wrapper_code.debug_printer
+        debug_printer_manager.set_printer_args(
+            call_args, kernel_name, arg_signatures, kernel
+        )
+        with debug_printer_manager:
+            kernel.call_kernel(kernel_name, template_node.node)
+=======
         kernel.call_kernel(kernel_name, template_node.node)
+>>>>>>> upstream/main
 
         V.graph.removed_buffers |= kernel.removed_buffers
         V.graph.inplaced_to_remove |= kernel.inplaced_to_remove

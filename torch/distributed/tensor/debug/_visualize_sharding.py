@@ -11,6 +11,9 @@ from torch.distributed.tensor.placement_types import Placement, Shard
 __all__ = ["visualize_sharding"]
 
 
+__all__ = ["visualize_sharding"]
+
+
 def _mesh_to_coordinate(mesh, device_type):
     """
     Given a n-dimensional list of device mesh, this function creates a map of
