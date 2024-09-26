@@ -8,10 +8,15 @@ import inspect
 import logging
 from typing import Any, Mapping, Sequence, TYPE_CHECKING
 
+<<<<<<< HEAD
 import onnx
 
 import torch
 import torch.export
+=======
+import torch
+from torch.onnx._internal._lazy_import import onnxscript_apis, onnxscript_ir as ir
+>>>>>>> upstream/main
 from torch.onnx._internal.exporter import _core, _onnx_program
 
 
@@ -30,7 +35,13 @@ def _signature(model) -> inspect.Signature:
 
 def _from_dynamic_axes_to_dynamic_shapes(
     model,
+<<<<<<< HEAD
     dynamic_axes=None,
+=======
+    *,
+    dynamic_axes=None,
+    output_names: set[str],
+>>>>>>> upstream/main
     input_names: Sequence[str] | None = None,
 ) -> dict[str, Any] | None:
     """
@@ -70,10 +81,20 @@ def _from_dynamic_axes_to_dynamic_shapes(
     # for the exported program
     dynamic_shapes_to_exported_program = {}
     for input_name, axes in dynamic_axes.items():
+<<<<<<< HEAD
         # input_name can be either from inptu_names or from the model inputs
         if input_name not in input_names_to_model_inputs:
             raise ValueError(
                 f"dynamix axis: {input_name} is not found in the input names: {input_names}"
+=======
+        if input_name in output_names:
+            # User specified an output name as a dynamic axis, so we skip it
+            continue
+        # input_name can be either from input_names or from the model inputs
+        if input_name not in input_names_to_model_inputs:
+            raise ValueError(
+                f"dynamic axis: {input_name} is not found in the input names: {input_names}"
+>>>>>>> upstream/main
             )
         model_input_name = input_names_to_model_inputs[input_name]
         if isinstance(axes, dict):
@@ -108,6 +129,7 @@ def _get_torch_export_args(
     return args, kwargs
 
 
+<<<<<<< HEAD
 def _convert_version(path: str | os.PathLike, opset_version: int) -> None:
     """Convert the ONNX file to a specific version."""
     model = onnx.load(path, load_external_data=False)
@@ -115,6 +137,8 @@ def _convert_version(path: str | os.PathLike, opset_version: int) -> None:
     onnx.save(model, path)
 
 
+=======
+>>>>>>> upstream/main
 def export_compat(
     model: torch.nn.Module
     | torch.export.ExportedProgram
@@ -142,20 +166,39 @@ def export_compat(
     artifacts_dir: str | os.PathLike = ".",
     fallback: bool = False,
     **_,
+<<<<<<< HEAD
 ) -> _onnx_program.ONNXProgram | None:
     if isinstance(model, torch.export.ExportedProgram):
         # We the model is already exported program, so the args, kwargs, and dynamic_shapes
+=======
+) -> _onnx_program.ONNXProgram:
+    if opset_version is None:
+        # TODO(justinchuby): Change the hardcoded opset version for it to be flexible
+        opset_version = 18
+
+    if isinstance(model, torch.export.ExportedProgram):
+        # We know the model is already exported program, so the args, kwargs, and dynamic_shapes
+>>>>>>> upstream/main
         # are not used
         dynamic_shapes = dynamic_shapes or {}
     else:
         args, kwargs = _get_torch_export_args(args, kwargs)
         if dynamic_shapes is None and dynamic_axes is not None:
             dynamic_shapes = _from_dynamic_axes_to_dynamic_shapes(
+<<<<<<< HEAD
                 model, dynamic_axes, input_names
             )
 
     should_convert_version = False
 
+=======
+                model,
+                dynamic_axes=dynamic_axes,
+                input_names=input_names,
+                output_names=set(output_names or ()),
+            )
+
+>>>>>>> upstream/main
     try:
         onnx_program = _core.export(
             model,
@@ -173,6 +216,7 @@ def export_compat(
             verbose=verbose,
         )
 
+<<<<<<< HEAD
         if f is not None:
             # Always save the initializers as external data to reduce the size of the ONNX file
             onnx_program.save(
@@ -187,6 +231,8 @@ def export_compat(
             ):
                 should_convert_version = True
 
+=======
+>>>>>>> upstream/main
     except Exception as e:
         if fallback:
             if verbose is not False:
@@ -194,6 +240,11 @@ def export_compat(
                     "[torch.onnx] Falling back to legacy torch.onnx.export due "
                     f"to the following error: {e}",
                 )
+<<<<<<< HEAD
+=======
+            if f is None:
+                raise TypeError("f must be provided when fallback is enabled") from e
+>>>>>>> upstream/main
             torch.onnx.utils.export(
                 model,  # type: ignore[arg-type]
                 args,
@@ -206,6 +257,7 @@ def export_compat(
                 dynamic_axes=dynamic_axes,
                 keep_initializers_as_inputs=keep_initializers_as_inputs,
             )
+<<<<<<< HEAD
             onnx_program = None
             if opset_version is None:
                 opset_version = 18
@@ -221,5 +273,24 @@ def export_compat(
                 f"[torch.onnx] Converting the ONNX file to opset version {opset_version}..."
             )
         _convert_version(f, opset_version)
+=======
+            onnx_program = _onnx_program.ONNXProgram(ir.load(f), None)
+        else:
+            raise
+
+    # Converter opset version and optimize
+    onnx_program.model = onnxscript_apis.convert_version(
+        onnx_program.model, opset_version
+    )
+    onnx_program.model = onnxscript_apis.optimize(onnx_program.model)
+
+    if f is not None:
+        onnx_program.save(
+            f,
+            include_initializers=export_params,
+            keep_initializers_as_inputs=keep_initializers_as_inputs,
+            external_data=external_data,
+        )
+>>>>>>> upstream/main
 
     return onnx_program

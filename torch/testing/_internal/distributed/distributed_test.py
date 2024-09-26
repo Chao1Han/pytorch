@@ -62,7 +62,7 @@ from torch.testing._internal.common_distributed import (
     initialize_temp_directories,
     cleanup_temp_dir,
     simple_sparse_reduce_tests,
-    skip_if_rocm,
+    skip_if_rocm_multiprocess,
     skip_if_small_worldsize,
     skip_if_odd_worldsize,
     skip_if_lt_x_gpu,
@@ -1021,7 +1021,7 @@ class DistributedTest:
             world_size = get_world_size(group_id)
 
             with self.assertRaisesRegex(
-                RuntimeError,
+                ValueError,
                 "The new group's rank should be within the world_size set by init_process_group",
             ):
                 dist.new_subgroups_by_enumeration(
@@ -3947,7 +3947,7 @@ class DistributedTest:
         @skip_but_pass_in_sandcastle_if(
             BACKEND != "ccl", "Only NCCL supports CUDA all_to_all"
         )
-        @skip_if_rocm
+        @skip_if_rocm_multiprocess
         def test_all_to_all_cuda(self):
             group, group_id, rank = self._init_global_test()
             rank_to_GPU = init_multigpu_helper(dist.get_world_size(), BACKEND)
@@ -3963,7 +3963,7 @@ class DistributedTest:
         @skip_but_pass_in_sandcastle_if(
             BACKEND != "ccl", "Only NCCL supports CUDA all_to_all"
         )
-        @skip_if_rocm
+        @skip_if_rocm_multiprocess
         def test_all_to_all_cuda_complex(self):
             group, group_id, rank = self._init_global_test()
             rank_to_GPU = init_multigpu_helper(dist.get_world_size(), BACKEND)
@@ -4031,7 +4031,7 @@ class DistributedTest:
             BACKEND != "ccl", "Only Nccl supports CUDA all_to_all_single"
         )
         @skip_if_small_worldsize
-        @skip_if_rocm
+        @skip_if_rocm_multiprocess
         def test_all_to_all_group_cuda(self):
             group, group_id, rank = self._init_group_test()
             rank_to_GPU = init_multigpu_helper(dist.get_world_size(), BACKEND)
@@ -4091,7 +4091,7 @@ class DistributedTest:
         @skip_but_pass_in_sandcastle_if(
             BACKEND != "ccl", "Only NCCL supports CUDA all_to_all"
         )
-        @skip_if_rocm
+        @skip_if_rocm_multiprocess
         def test_all_to_all_full_group_cuda(self):
             group, group_id, rank = self._init_full_group_test()
             rank_to_GPU = init_multigpu_helper(dist.get_world_size(), BACKEND)

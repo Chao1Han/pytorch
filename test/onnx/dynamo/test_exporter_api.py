@@ -1,16 +1,19 @@
 # Owner(s): ["module: onnx"]
 import io
-import os
 
 import onnx
 
 import torch
 from torch.onnx import dynamo_export, ExportOptions, ONNXProgram
+<<<<<<< HEAD
 from torch.onnx._internal import _exporter_legacy
 from torch.onnx._internal._exporter_legacy import (
     ONNXProgramSerializer,
     ResolvedExportOptions,
 )
+=======
+from torch.onnx._internal._exporter_legacy import ResolvedExportOptions
+>>>>>>> upstream/main
 from torch.testing._internal import common_utils
 
 
@@ -75,6 +78,7 @@ class TestDynamoExportAPI(common_utils.TestCase):
         dynamo_export(SampleModel(), torch.randn(1, 1, 2)).save(buffer)
         onnx.load(buffer)
 
+<<<<<<< HEAD
     def test_save_to_file_using_specified_serializer(self):
         expected_buffer = "I am not actually ONNX"
 
@@ -148,6 +152,8 @@ class TestDynamoExportAPI(common_utils.TestCase):
         with self.assertRaises(RuntimeError):
             onnx_program.model_proto
 
+=======
+>>>>>>> upstream/main
     def test_raise_from_diagnostic_warning_when_diagnostic_option_warning_as_error_is_true(
         self,
     ):

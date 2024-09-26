@@ -5,6 +5,7 @@ from __future__ import annotations
 
 __all__ = ["ONNXProgram"]
 
+<<<<<<< HEAD
 import gc
 import logging
 import os
@@ -21,10 +22,33 @@ from torch.utils import _pytree as pytree
 onnx = _lazy_import.onnx
 ir = _lazy_import.onnxscript_ir
 
+=======
+import copy
+import gc
+import logging
+import os
+import tempfile
+import textwrap
+import warnings
+from typing import Callable, Sequence, TYPE_CHECKING
+
+import torch
+from torch.onnx._internal._lazy_import import onnx, onnxscript_apis, onnxscript_ir as ir
+from torch.utils import _pytree
+
+
+# NOTE: DO NOT import module from torch.onnx._internal to this module in the global scope
+# because ONNXProgram is exposed to the public API
+>>>>>>> upstream/main
 
 if TYPE_CHECKING:
     import onnxruntime as ort
 
+<<<<<<< HEAD
+=======
+_LARGE_MODEL_THRESHOLD = 1536 * 1024 * 1024  # 1536MB
+
+>>>>>>> upstream/main
 logger = logging.getLogger(__name__)
 
 
@@ -47,6 +71,18 @@ def _ort_session_initializer(model: str | bytes) -> ort.InferenceSession:
     )
 
 
+<<<<<<< HEAD
+=======
+def _count_initializer_size(graph: ir.Graph) -> int:
+    """Count the total size of the initializers in bytes."""
+    return sum(
+        v.const_value.nbytes
+        for v in graph.initializers.values()
+        if v.const_value is not None
+    )
+
+
+>>>>>>> upstream/main
 class ONNXProgram:
     """A class to represent an ONNX program that is callable with torch tensors."""
 
@@ -100,16 +136,25 @@ ONNXProgram(
 
     @property
     def model_proto(self) -> onnx.ModelProto:
+<<<<<<< HEAD
         """Compatibility property for `torch.onnx.ONNXProgram.model_proto`."""
+=======
+        """Return the ONNX ``ModelProto`` object."""
+>>>>>>> upstream/main
         return ir.serde.serialize_model(self.model)
 
     def save(
         self,
+<<<<<<< HEAD
         destination: str | os.PathLike | IO[bytes],
+=======
+        destination: str | os.PathLike,
+>>>>>>> upstream/main
         *,
         include_initializers: bool = True,
         keep_initializers_as_inputs: bool = False,
         external_data: bool | None = None,
+<<<<<<< HEAD
         **_,
     ):
         """Save the ONNX model to the specified destination.
@@ -117,6 +162,30 @@ ONNXProgram(
         When `external_data` is `True` or the model is larger than 2GB,
         the weights are saved as external data in a separate file.
 
+=======
+    ):
+        """Save the ONNX model to the specified destination.
+
+        When ``external_data`` is ``True`` or the model is larger than 2GB,
+        the weights are saved as external data in a separate file.
+
+        Initializer (model weights) serialization behaviors:
+        * ``include_initializers=True``, ``keep_initializers_as_inputs=False`` (default):
+        The initializers are included in the saved model.
+        * ``include_initializers=True``, ``keep_initializers_as_inputs=True``:
+        The initializers are included in the saved model and kept as model inputs.
+        Choose this option if you want the ability to override the model weights
+        during inference.
+        * ``include_initializers=False``, ``keep_initializers_as_inputs=False``:
+        The initializers are not included in the saved model and are not listed
+        as model inputs. Choose this option if you want to attach the initializers
+        to the ONNX model in a separate, post-processing, step.
+        * ``include_initializers=False``, ``keep_initializers_as_inputs=True``:
+        The initializers are not included in the saved model but are listed as model
+        inputs. Choose this option if you want to supply the initializers during
+        inference and want to minimize the size of the saved model.
+
+>>>>>>> upstream/main
         Args:
             destination: The path to save the ONNX model to.
             include_initializers: Whether to include the initializers in the saved model.
@@ -126,6 +195,7 @@ ONNXProgram(
             external_data: Whether to save the weights as external data in a separate file.
 
         Raises:
+<<<<<<< HEAD
             TypeError: If `external_data` is `True` and `destination` is not a file path.
         """
         if not include_initializers:
@@ -166,6 +236,56 @@ ONNXProgram(
             )
         else:
             onnx.save_model(proto, destination)
+=======
+            TypeError: If ``external_data`` is ``True`` and ``destination`` is not a file path.
+        """
+        original_initializers = copy.copy(self.model.graph.initializers)
+        original_inputs = copy.copy(self.model.graph.inputs)
+
+        # Adjust the model based on options
+        if not include_initializers:
+            self.model.graph.initializers.clear()
+        if keep_initializers_as_inputs:
+            self.model.graph.inputs.extend(original_initializers.values())  # type: ignore[arg-type]
+
+        # Save the model to disk
+        if (
+            external_data
+            or _count_initializer_size(self.model.graph) > _LARGE_MODEL_THRESHOLD
+        ):
+            onnxscript_apis.save_model_with_external_data(self.model, destination)
+        else:
+            ir.save(self.model, destination)
+
+        # Revert the changes to the model
+        if not include_initializers:
+            self.model.graph.initializers.update(original_initializers)
+        if keep_initializers_as_inputs:
+            self.model.graph.inputs.clear()
+            self.model.graph.inputs.extend(original_inputs)
+
+    def apply_weights(self, state_dict: dict[str, torch.Tensor]) -> None:
+        """Apply the weights from the specified state dict to the ONNX model.
+
+        Use this method to replace FakeTensors or other weights.
+
+        Args:
+            state_dict: The state dict containing the weights to apply to the ONNX model.
+        """
+        from torch.onnx._internal.exporter import _core
+
+        for name, tensor in state_dict.items():
+            if name in self.model.graph.initializers:
+                self.model.graph.initializers[name].const_value = _core.TorchTensor(
+                    tensor, name
+                )
+            else:
+                warnings.warn(
+                    f"Weight '{name}' not found in the model. Skipped applying.",
+                    category=torch.onnx.errors.OnnxExporterWarning,
+                    stacklevel=1,
+                )
+>>>>>>> upstream/main
 
     def initialize_inference_session(
         self,
@@ -182,6 +302,7 @@ ONNXProgram(
         """
         # TODO(justinchuby): Allow different inference options
         logger.debug("Initializing the inference session.")
+<<<<<<< HEAD
         proto = ir.serde.serialize_model(self.model)
         byte_size = proto.ByteSize()
         model_too_large = (byte_size) >= 1 << 31
@@ -203,6 +324,19 @@ ONNXProgram(
             model = model_path
         else:
             model = proto.SerializeToString()  # type: ignore[assignment]
+=======
+        if (
+            byte_size := _count_initializer_size(self.model.graph)
+        ) > _LARGE_MODEL_THRESHOLD:
+            logger.debug("The model initializers is larger than 1.5GB (%s).", byte_size)
+            # Save the model to a temporary file if too large
+            self._tempdir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+            model_path = os.path.join(self._tempdir.name, "model.onnx")
+            self.save(model_path, external_data=True)
+            model = model_path
+        else:
+            model = self.model_proto.SerializeToString()  # type: ignore[assignment]
+>>>>>>> upstream/main
 
         self._inference_session = initializer(model)
         logger.debug("Inference session initialized.")
@@ -231,7 +365,11 @@ def _process_args(args, kwargs) -> tuple[torch.Tensor, ...]:
 
 
 def _flatten_inputs(model_args, model_kwargs):
+<<<<<<< HEAD
     flattened_args, _ = pytree.tree_flatten((model_args, model_kwargs))
+=======
+    flattened_args, _ = _pytree.tree_flatten((model_args, model_kwargs))
+>>>>>>> upstream/main
     return flattened_args
 
 

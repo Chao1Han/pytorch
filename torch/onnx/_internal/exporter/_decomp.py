@@ -1,8 +1,15 @@
+<<<<<<< HEAD
 """Build decomp table from PyTorch."""
 
 # mypy: allow-untyped-defs
 from __future__ import annotations
 
+=======
+# mypy: allow-untyped-defs
+from __future__ import annotations
+
+import itertools
+>>>>>>> upstream/main
 from typing import Callable, TYPE_CHECKING
 
 import torch
@@ -40,6 +47,7 @@ def get_onnx_implemented_overloads(
     return registered_ops
 
 
+<<<<<<< HEAD
 def get_preserve_ops() -> set[torch._ops.OpOverload]:
     """Return a set of CompositeImplicitAutograd ops that should be preserved."""
     aten = torch.ops.aten
@@ -67,6 +75,8 @@ def get_preserve_ops() -> set[torch._ops.OpOverload]:
     }
 
 
+=======
+>>>>>>> upstream/main
 def create_onnx_friendly_decomposition_table(
     onnx_registered_ops: set[torch._ops.OperatorBase],
 ) -> dict[torch._ops.OperatorBase, Callable]:
@@ -85,16 +95,29 @@ def create_onnx_friendly_decomposition_table(
     """
     decomposition_table: dict[torch._ops.OperatorBase, Callable] = {}
 
+<<<<<<< HEAD
     # NOTE: If we import torch._decomp, we will get RuntimeError: Only a single
     # TORCH_LIBRARY can be used to register the namespace nvprims; please put all of your
     # definitions in a single TORCH_LIBRARY block.
     for op_overload, decomp_fn in torch._decomp.decomposition_table.items():  # type: ignore[attr-defined]
+=======
+    for op_overload, decomp_fn in itertools.chain(
+        torch._decomp._decomp_table_to_post_autograd_aten().items(),  # type: ignore[attr-defined]
+        torch._decomp.decomposition_table.items(),  # type: ignore[attr-defined]
+    ):
+>>>>>>> upstream/main
         # Skip decomposition for op_overload as long as that op_overload has a corresponding ONNX
         # symbolic function.
         # NOTE: Do not skip torch._refs decomps. They are fine because otherwise the model is
         # not exportable anyways.
         if op_overload in onnx_registered_ops:
             continue
+<<<<<<< HEAD
+=======
+        # If it is HOP, we filter those out as well.
+        if not hasattr(op_overload, "_schema"):
+            continue
+>>>>>>> upstream/main
         decomposition_table[op_overload] = decomp_fn
 
     return decomposition_table

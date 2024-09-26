@@ -11,6 +11,7 @@ _DNNL_RUNTIME_OMP = {
     "#cmakedefine DNNL_SYCL_CUDA": "/* #undef DNNL_SYCL_CUDA */",
     "#cmakedefine DNNL_SYCL_HIP": "/* #undef DNNL_SYCL_HIP */",
     "#cmakedefine DNNL_ENABLE_STACK_CHECKER": "#undef DNNL_ENABLE_STACK_CHECKER",
+    "#cmakedefine DNNL_EXPERIMENTAL_UKERNEL": "/* undef DNNL_EXPERIMENTAL_UKERNEL */",
     "#cmakedefine DNNL_EXPERIMENTAL": "#undef DNNL_EXPERIMENTAL",
     "#cmakedefine DNNL_EXPERIMENTAL_SPARSE": "#undef DNNL_EXPERIMENTAL_SPARSE",
     "#cmakedefine DNNL_EXPERIMENTAL_UKERNEL": "#undef DNNL_EXPERIMENTAL_UKERNEL",
@@ -138,6 +139,7 @@ cc_library(
         "DNNL_ENABLE_CONCURRENT_EXEC",
         "DNNL_ENABLE_PRIMITIVE_CACHE",
         "DNNL_ENABLE_CPU_ISA_HINTS",
+        "DNNL_EXPERIMENTAL_UKERNEL",
         "ONEDNN_BUILD_GRAPH",
     ],
 )

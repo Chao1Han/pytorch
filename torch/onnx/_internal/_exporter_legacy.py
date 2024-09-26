@@ -1,40 +1,39 @@
 # mypy: allow-untyped-defs
-from __future__ import (  # for onnx.ModelProto (ONNXProgram) and onnxruntime (ONNXRuntimeOptions)
-    annotations,
-)
+from __future__ import annotations
+
+
+__all__ = [
+    "DiagnosticOptions",
+    "ExportOptions",
+    "ONNXRuntimeOptions",
+    "InvalidExportOptionsError",
+    "OnnxRegistry",
+    "UnsatisfiedDependencyError",
+    "dynamo_export",
+    "enable_fake_mode",
+]
+
 
 import abc
 import contextlib
 import dataclasses
 import logging
-import os
-import tempfile
 import warnings
 from collections import defaultdict
-from typing import (
-    Any,
-    Callable,
-    Final,
-    Mapping,
-    Protocol,
-    runtime_checkable,
-    Sequence,
-    TYPE_CHECKING,
-    TypeVar,
-)
-from typing_extensions import Self
+from typing import Any, Callable, Final, Mapping, Sequence, TYPE_CHECKING, TypeVar
 
 import torch
 import torch._ops
-import torch.export as torch_export
 import torch.utils._pytree as pytree
+from torch.onnx import errors
 from torch.onnx._internal import io_adapter
+from torch.onnx._internal._lazy_import import onnxscript_ir as ir
 from torch.onnx._internal.diagnostics import infra
+from torch.onnx._internal.exporter import _onnx_program
 from torch.onnx._internal.fx import (
     decomposition_table,
     patcher as patcher,
     registration,
-    serialization as fx_serialization,
 )
 
 
@@ -44,13 +43,8 @@ from torch.onnx._internal.fx import (
 if TYPE_CHECKING:
     import io
 
-    import onnx
-
-    import onnxruntime  # type: ignore[import]
-    import onnxscript  # type: ignore[import]
-    from onnxscript.function_libs.torch_lib import (  # type: ignore[import]
-        registration as torchlib_registry,
-    )
+    import onnxruntime
+    import onnxscript
 
     from torch._subclasses import fake_tensor
     from torch.onnx._internal.fx import diagnostics
@@ -66,9 +60,6 @@ _PYTORCH_GITHUB_ISSUES_URL = "https://github.com/pytorch/pytorch/issues"
 _DEFAULT_FAILED_EXPORT_SARIF_LOG_PATH = "report_dynamo_export.sarif"
 """The default path to write the SARIF log to if the export fails."""
 
-_PROTOBUF_SIZE_MAX_LIMIT = 2 * 1024 * 1024 * 1024
-"""The maximum size of a Protobuf file in bytes. This is used to determine whether to
-serialize the model with external data or not."""
 
 log = logging.getLogger(__name__)
 
@@ -109,10 +100,13 @@ class OnnxRegistry:
         # the public methods: register_custom_op, get_ops, and is_registered_op.
         self._registry: dict[registration.OpName, list[registration.ONNXFunction]] = (
             defaultdict(list)
+<<<<<<< HEAD
         )
         # FIXME: Avoid importing onnxscript into torch
         from onnxscript.function_libs.torch_lib import (  # type: ignore[import]  # noqa: F401
             registration,
+=======
+>>>>>>> upstream/main
         )
 
         # opset_version is unused for now, since torchlib only supports opset18.
@@ -123,8 +117,7 @@ class OnnxRegistry:
             "different opset version, please register them with register_custom_op."
         )
 
-        # Initialize registry from torchlib
-        self._initiate_registry_from_torchlib(registration.default_registry)
+        self._initiate_registry_from_torchlib()
 
     @property
     def opset_version(self) -> int:
@@ -134,33 +127,25 @@ class OnnxRegistry:
 
         return self._opset_version
 
-    def _initiate_registry_from_torchlib(
-        self, torchlib_registry: torchlib_registry.Registry
-    ):
+    def _initiate_registry_from_torchlib(self) -> None:
         """Populates the registry with ATen functions from torchlib.
 
         Args:
             torchlib_registry: The torchlib registry to use for populating the registry.
         """
-        for aten_name, aten_overloads_func in torchlib_registry.items():
-            internal_name_instance = registration.OpName.from_qualified_name(aten_name)
-            for overload_func in aten_overloads_func.overloads:
-                symbolic_function = registration.ONNXFunction(
-                    onnx_function=overload_func,
-                    op_full_name=internal_name_instance.qualified_name(),
-                    is_custom=False,
-                    is_complex=False,
-                )
-                self._register(internal_name_instance, symbolic_function)
+        import onnxscript._framework_apis.torch_2_5 as onnxscript_apis
 
-            for complex_func in aten_overloads_func.complex:
-                symbolic_function = registration.ONNXFunction(
-                    onnx_function=complex_func,
-                    op_full_name=internal_name_instance.qualified_name(),
-                    is_custom=False,
-                    is_complex=True,
-                )
-                self._register(internal_name_instance, symbolic_function)
+        for meta in onnxscript_apis.get_torchlib_ops():
+            internal_name_instance = registration.OpName.from_qualified_name(
+                meta.qualified_name
+            )
+            symbolic_function = registration.ONNXFunction(
+                onnx_function=meta.function,  # type: ignore[arg-type]
+                op_full_name=internal_name_instance.qualified_name(),
+                is_custom=False,
+                is_complex=meta.is_complex,
+            )
+            self._register(internal_name_instance, symbolic_function)
 
     def _register(
         self,
@@ -263,7 +248,6 @@ class ExportOptions:
             When ``None``, the exporter determines the most compatible setting.
             When ``True``, all input shapes are considered dynamic.
             When ``False``, all input shapes are considered static.
-        op_level_debug: Whether to export the model with op-level debug information
         diagnostic_options: The diagnostic options for the exporter.
         fake_context: The fake context used for symbolic tracing.
         onnx_registry: The ONNX registry used to register ATen operators to ONNX functions.
@@ -276,9 +260,6 @@ class ExportOptions:
     - ``True``: all input shapes are considered dynamic.
     - ``False``: all input shapes are considered static.
     """
-
-    op_level_debug: bool | None = None
-    """When True export the model with op-level debug running ops through ONNX Runtime."""
 
     diagnostic_options: DiagnosticOptions
     """The diagnostic options for the exporter."""
@@ -293,13 +274,11 @@ class ExportOptions:
         self,
         *,
         dynamic_shapes: bool | None = None,
-        op_level_debug: bool | None = None,
         fake_context: ONNXFakeContext | None = None,
         onnx_registry: OnnxRegistry | None = None,
         diagnostic_options: DiagnosticOptions | None = None,
     ):
         self.dynamic_shapes = dynamic_shapes
-        self.op_level_debug = op_level_debug
         self.fake_context = fake_context
         self.onnx_registry = onnx_registry
         self.diagnostic_options = diagnostic_options or DiagnosticOptions()
@@ -313,7 +292,6 @@ class ResolvedExportOptions(ExportOptions):
 
     # Public attributes MUST be redefined below without ``Optional[]`` from ``ExportOptions``
     dynamic_shapes: bool
-    op_level_debug: bool
     diagnostic_options: DiagnosticOptions
     fake_context: ONNXFakeContext
     onnx_registry: OnnxRegistry
@@ -337,28 +315,17 @@ class ResolvedExportOptions(ExportOptions):
     def __init__(
         self,
         options: ExportOptions | ResolvedExportOptions,
-        model: torch.nn.Module | Callable | torch_export.ExportedProgram | None = None,  # type: ignore[name-defined]
+        model: torch.nn.Module | Callable | None = None,  # type: ignore[name-defined]
     ):
         from torch.onnx._internal.fx import (  # TODO: Prevent circular dep
             diagnostics,
             dynamo_graph_extractor,
-            torch_export_graph_extractor,
         )
 
         if isinstance(options, ResolvedExportOptions):
             self.dynamic_shapes = options.dynamic_shapes
-            self.op_level_debug = options.op_level_debug
             self.diagnostic_options = options.diagnostic_options
             self.fake_context = options.fake_context
-            # private
-            if isinstance(model, torch_export.ExportedProgram) and not isinstance(
-                options.fx_tracer, torch_export_graph_extractor.TorchExport
-            ):
-                message = "'model' of type 'ExportedProgram' is only supported with 'TorchExport' FX Tracer"
-                e = InvalidExportOptionsError(message)
-                raise InvalidExportOptionsError(
-                    ONNXProgram._from_failure(e, options.diagnostic_context), message
-                )
             self.fx_tracer = options.fx_tracer
             self.onnx_registry = options.onnx_registry
             self.onnxfunction_dispatcher = options.onnxfunction_dispatcher
@@ -379,10 +346,8 @@ class ResolvedExportOptions(ExportOptions):
             self.diagnostic_options = resolve(
                 options.diagnostic_options, DiagnosticOptions()
             )
-            if isinstance(model, torch_export.ExportedProgram):
-                self.fx_tracer = torch_export_graph_extractor.TorchExport()
-            else:
-                self.fx_tracer = dynamo_graph_extractor.DynamoExport()
+
+            self.fx_tracer = dynamo_graph_extractor.DynamoExport()
 
             self.fake_context = resolve(options.fake_context, None)  # type: ignore[arg-type]
             self.diagnostic_context = diagnostics.DiagnosticContext(
@@ -400,7 +365,6 @@ class ResolvedExportOptions(ExportOptions):
 
             from torch.onnx._internal.fx import onnxfunction_dispatcher
 
-            self.op_level_debug = resolve(options.op_level_debug, False)
             self.onnxfunction_dispatcher = (
                 onnxfunction_dispatcher.OnnxFunctionDispatcher(
                     self.onnx_registry,
@@ -430,8 +394,7 @@ def enable_fake_mode():
     are too large to fit into memory.
 
     Returns:
-        A :class:`ONNXFakeContext` object that must be passed to :func:`dynamo_export`
-        through the :attr:`ExportOptions.fake_context` argument.
+        A :class:`ONNXFakeContext` object.
 
     Example::
 
@@ -449,15 +412,16 @@ def enable_fake_mode():
         ...     my_nn_module = MyModel()
         ...     arg1 = torch.randn(2, 2, 2)  # positional input 1
         >>> export_options = torch.onnx.ExportOptions(fake_context=fake_context)
-        >>> onnx_program = torch.onnx.dynamo_export(
-        ...     my_nn_module,
-        ...     arg1,
-        ...     export_options=export_options
-        ... )
+        >>> onnx_program = torch.onnx.export(my_nn_module, (arg1,), dynamo=True)
+        >>> onnx_program.apply_weights(MyModel().state_dict())
         >>> # Saving model WITHOUT initializers
-        >>> onnx_program.save("my_model_without_initializers.onnx")
+        >>> onnx_program.save(
+        ...     "my_model_without_initializers.onnx",
+        ...     include_initializers=False,
+        ...     keep_initializers_as_inputs=True,
+        ... )
         >>> # Saving model WITH initializers
-        >>> onnx_program.save("my_model_with_initializers.onnx", model_state=MyModel().state_dict())
+        >>> onnx_program.save("my_model_with_initializers.onnx")
 
     .. warning::
         This API is experimental and is *NOT* backward-compatible.
@@ -485,97 +449,6 @@ def enable_fake_mode():
     fake_context.state_dict_paths = tuple(
         patcher_context.paths,
     )  # type: ignore[assignment]
-
-
-@runtime_checkable
-class ONNXProgramSerializer(Protocol):
-    """Protocol for serializing an ONNX graph into a specific format (e.g. Protobuf).
-    Note that this is an advanced usage scenario."""
-
-    def serialize(
-        self, onnx_program: ONNXProgram, destination: io.BufferedIOBase
-    ) -> None:
-        """Protocol method that must be implemented for serialization.
-
-        Args:
-            onnx_program: Represents the in-memory exported ONNX model
-            destination: A binary IO stream or pre-allocated buffer into which
-                the serialized model should be written.
-
-        Example:
-
-            A simple serializer that writes the exported :py:obj:`onnx.ModelProto` in Protobuf
-            format to ``destination``:
-
-            ::
-
-                # xdoctest: +REQUIRES(env:TORCH_DOCTEST_ONNX)
-                >>> import io
-                >>> import torch
-                >>> import torch.onnx
-                >>> class MyModel(torch.nn.Module):  # Dummy model
-                ...     def __init__(self) -> None:
-                ...         super().__init__()
-                ...         self.linear = torch.nn.Linear(2, 2)
-                ...     def forward(self, x):
-                ...         out = self.linear(x)
-                ...         return out
-                >>> class ProtobufONNXProgramSerializer:
-                ...     def serialize(
-                ...         self, onnx_program: torch.onnx.ONNXProgram, destination: io.BufferedIOBase
-                ...     ) -> None:
-                ...         destination.write(onnx_program.model_proto.SerializeToString())
-                >>> model = MyModel()
-                >>> arg1 = torch.randn(2, 2, 2)  # positional input 1
-                >>> torch.onnx.dynamo_export(model, arg1).save(
-                ...     destination="exported_model.onnx",
-                ...     serializer=ProtobufONNXProgramSerializer(),
-                ... )
-        """
-        ...
-
-
-class ProtobufONNXProgramSerializer:
-    """Serializes ONNX graph as Protobuf."""
-
-    def serialize(
-        self, onnx_program: ONNXProgram, destination: io.BufferedIOBase
-    ) -> None:
-        import onnx
-
-        if not isinstance(onnx_program.model_proto, onnx.ModelProto):  # type: ignore[attr-defined]
-            raise ValueError("onnx_program.ModelProto is not an onnx.ModelProto")
-        destination.write(onnx_program.model_proto.SerializeToString())
-
-
-class LargeProtobufONNXProgramSerializer:
-    """Serializes ONNX graph as Protobuf.
-
-    Fallback to serializing as Protobuf with external data for models larger than 2GB.
-    """
-
-    _destination_path: Final[str]  # type: ignore[misc]
-
-    def __init__(self, destination_path: str):
-        self._destination_path = destination_path
-
-    def serialize(
-        self, onnx_program: ONNXProgram, destination: io.BufferedIOBase
-    ) -> None:
-        """`destination` is ignored. The model is saved to `self._destination_path` instead."""
-        import onnx
-
-        if onnx_program.model_proto.ByteSize() < _PROTOBUF_SIZE_MAX_LIMIT:
-            onnx.save_model(onnx_program.model_proto, self._destination_path)  # type: ignore[attr-defined]
-        else:
-            # ValueError: Message onnx.ModelProto exceeds maximum protobuf size of 2GB
-            # Fallback to serializing the model with external data.
-            onnx.save_model(  # type: ignore[attr-defined]
-                onnx_program.model_proto,
-                self._destination_path,
-                save_as_external_data=True,
-                all_tensors_to_one_file=True,
-            )
 
 
 class ONNXRuntimeOptions:
@@ -608,6 +481,7 @@ class ONNXRuntimeOptions:
         self.execution_provider_options = execution_provider_options
 
 
+<<<<<<< HEAD
 class ONNXProgram:
     """An in-memory representation of a PyTorch model that has been exported to ONNX.
 
@@ -1116,6 +990,8 @@ class ONNXProgram:
         )
 
 
+=======
+>>>>>>> upstream/main
 class FXGraphExtractor(abc.ABC):
     """Abstract interface for FX graph extractor engines.
     This class isolates FX extraction logic from the rest of the export logic.
@@ -1168,7 +1044,7 @@ class Exporter:
     def __init__(
         self,
         options: ResolvedExportOptions,
-        model: torch.nn.Module | Callable | torch_export.ExportedProgram,
+        model: torch.nn.Module | Callable,
         model_args: Sequence[Any],
         model_kwargs: Mapping[str, Any],
     ):
@@ -1188,7 +1064,7 @@ class Exporter:
         ):
             self._assert_fake_tensor_mode()
 
-    def export(self) -> ONNXProgram:
+    def export(self) -> _onnx_program.ONNXProgram:
         from torch.export._trace import (  # TODO: Prevent circular dependency
             DEFAULT_EXPORT_DYNAMO_CONFIG,
         )
@@ -1213,7 +1089,6 @@ class Exporter:
             onnxscript_graph = fx_interpreter.run(
                 fx_graph_module=graph_module,
                 onnxfunction_dispatcher=self.options.onnxfunction_dispatcher,
-                op_level_debug=self.options.op_level_debug,
             )
 
             # NOTE: Filter out the initializers with fake tensors when it's fake_mode exporting.
@@ -1251,16 +1126,8 @@ class Exporter:
                     f"\n\nDetail:\n{e}"
                 )
 
-            return torch.onnx.ONNXProgram(
-                onnx_model,
-                self.options.fx_tracer.input_adapter,
-                self.options.fx_tracer.output_adapter,
-                self.options.diagnostic_context,
-                fake_context=self.options.fake_context,
-                model_signature=getattr(
-                    self.model, "graph_signature", None
-                ),  # Available for isinstance(self.model, ExportedProgram) only
-                model_torch=self.model,
+            return _onnx_program.ONNXProgram(
+                ir.serde.deserialize_model(onnx_model), None
             )
 
     def _assert_fake_tensor_mode(self):
@@ -1312,28 +1179,6 @@ class UnsatisfiedDependencyError(RuntimeError):
         self.package_name = package_name
 
 
-class OnnxExporterError(RuntimeError):
-    """Raised when an ONNX exporter error occurs.
-
-    This exception is thrown when there's an error during the ONNX export process.
-    It encapsulates the :class:`ONNXProgram` object generated until the failure, allowing
-    access to the partial export results and associated metadata.
-    """
-
-    onnx_program: Final[ONNXProgram]  # type: ignore[misc]
-
-    def __init__(self, onnx_program: ONNXProgram, message: str):
-        """
-        Initializes the OnnxExporterError with the given ONNX program and message.
-
-        Args:
-            onnx_program (ONNXProgram): The partial results of the ONNX export.
-            message (str): The error message to be displayed.
-        """
-        super().__init__(message)
-        self.onnx_program = onnx_program
-
-
 class InvalidExportOptionsError(RuntimeError):
     """Raised when user specified an invalid value for the :class:`ExportOptions`."""
 
@@ -1380,12 +1225,12 @@ def _assert_dependencies(export_options: ResolvedExportOptions):
 
 
 def dynamo_export(
-    model: torch.nn.Module | Callable | torch_export.ExportedProgram,  # type: ignore[name-defined]
+    model: torch.nn.Module | Callable,
     /,
     *model_args,
     export_options: ExportOptions | None = None,
     **model_kwargs,
-) -> ONNXProgram:
+) -> _onnx_program.ONNXProgram:
     """Export a torch.nn.Module to an ONNX graph.
 
     Args:
@@ -1483,10 +1328,7 @@ def dynamo_export(
             "or SARIF web viewer (https://microsoft.github.io/sarif-web-component/). "
             f"Please report a bug on PyTorch Github: {_PYTORCH_GITHUB_ISSUES_URL}"
         )
-        raise OnnxExporterError(
-            ONNXProgram._from_failure(e, resolved_export_options.diagnostic_context),
-            message,
-        ) from e
+        raise errors.OnnxExporterError(message) from e
 
 
 def common_pre_export_passes(
@@ -1564,18 +1406,3 @@ def common_pre_export_passes(
     )
 
     return module
-
-
-__all__ = [
-    "DiagnosticOptions",
-    "ExportOptions",
-    "ONNXProgram",
-    "ONNXProgramSerializer",
-    "ONNXRuntimeOptions",
-    "InvalidExportOptionsError",
-    "OnnxExporterError",
-    "OnnxRegistry",
-    "UnsatisfiedDependencyError",
-    "dynamo_export",
-    "enable_fake_mode",
-]

@@ -4,7 +4,7 @@ import torch
 import intel_extension_for_pytorch
 import oneccl_bindings_for_pytorch
 import torch.nn as nn
-from torch.distributed._tensor.debug._op_coverage import get_inductor_decomp_graphs
+from torch.distributed.tensor.debug._op_coverage import get_inductor_decomp_graphs
 from torch.testing._internal.common_utils import run_tests, TestCase
 
 

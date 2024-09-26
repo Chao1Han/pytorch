@@ -8,7 +8,7 @@ import intel_extension_for_pytorch
 import oneccl_bindings_for_pytorch
 from torch.distributed._tensor import DeviceMesh
 from torch.distributed._tensor.api import distribute_tensor, DTensor
-from torch.distributed._tensor.debug import CommDebugMode
+from torch.distributed.tensor.debug import CommDebugMode
 from torch.distributed.tensor.parallel import (
     ColwiseParallel,
     parallelize_module,

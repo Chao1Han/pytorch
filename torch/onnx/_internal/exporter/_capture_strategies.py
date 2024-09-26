@@ -10,7 +10,10 @@ import pathlib
 from typing import Any, Callable, TYPE_CHECKING
 
 import torch
+<<<<<<< HEAD
 from torch._export import converter as _torchscript_converter
+=======
+>>>>>>> upstream/main
 from torch.utils import _pytree
 
 
@@ -120,9 +123,28 @@ class TorchExportStrategy(CaptureStrategy):
     def _capture(
         self, model, args, kwargs, dynamic_shapes
     ) -> torch.export.ExportedProgram:
+<<<<<<< HEAD
         return torch.export.export(
             model, args, kwargs=kwargs, dynamic_shapes=dynamic_shapes
         )
+=======
+        try:
+            return torch.export.export(
+                model, args, kwargs=kwargs, dynamic_shapes=dynamic_shapes
+            )
+        except torch._dynamo.exc.UserError as exc:
+            # Refine the dynamic shapes based on the suggested fixes.
+            try:
+                new_shapes = torch.export.dynamic_shapes.refine_dynamic_shapes_from_suggested_fixes(
+                    exc.msg, dynamic_shapes
+                )
+            except Exception:
+                # If the dynamic shapes cannot be refined, re-raise the exception.
+                raise exc from None
+            return torch.export.export(
+                model, args, kwargs=kwargs, dynamic_shapes=new_shapes
+            )
+>>>>>>> upstream/main
 
     def _enter(self, model) -> None:
         model_repr = _take_first_line(repr(model))
@@ -148,9 +170,28 @@ class TorchExportNonStrictStrategy(CaptureStrategy):
     def _capture(
         self, model, args, kwargs, dynamic_shapes
     ) -> torch.export.ExportedProgram:
+<<<<<<< HEAD
         return torch.export.export(
             model, args, kwargs=kwargs, dynamic_shapes=dynamic_shapes, strict=False
         )
+=======
+        try:
+            return torch.export.export(
+                model, args, kwargs=kwargs, dynamic_shapes=dynamic_shapes, strict=False
+            )
+        except torch._dynamo.exc.UserError as exc:
+            # Refine the dynamic shapes based on the suggested fixes.
+            try:
+                new_shapes = torch.export.dynamic_shapes.refine_dynamic_shapes_from_suggested_fixes(
+                    exc.msg, dynamic_shapes
+                )
+            except Exception:
+                # If the dynamic shapes cannot be refined, re-raise the exception.
+                raise exc from None
+            return torch.export.export(
+                model, args, kwargs=kwargs, dynamic_shapes=new_shapes, strict=False
+            )
+>>>>>>> upstream/main
 
     def _enter(self, model) -> None:
         model_repr = _take_first_line(repr(model))
@@ -176,6 +217,12 @@ class JitTraceConvertStrategy(CaptureStrategy):
     def _capture(
         self, model, args, kwargs, dynamic_shapes
     ) -> torch.export.ExportedProgram:
+<<<<<<< HEAD
+=======
+        # Avoid circular import
+        from torch._export import converter as _torchscript_converter
+
+>>>>>>> upstream/main
         del dynamic_shapes  # Unused
 
         flattened_args, spec = _pytree.tree_flatten((args, kwargs))
