@@ -89,7 +89,7 @@ class ShardedGradScaler(GradScaler):
 
     def __init__(
         self,
-        device: str = "xpu", # todo: pass by argument
+        device: str = "cuda",
         init_scale: float = 2.0**16,
         backoff_factor: float = 0.5,
         growth_factor: float = 2.0,
