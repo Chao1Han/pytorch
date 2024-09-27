@@ -92,6 +92,8 @@ class _FSDPDeviceHandle:
         Just return torch.cuda if the device is cuda to make attribute-access faster.
         Custom backend must first register a module with the same name with {device.type} on torch.
         """
+        if device.type == "xpu":
+            return cast(_FSDPDeviceHandle, torch.xpu)
         if device.type == "cuda":
             return cast(_FSDPDeviceHandle, torch.cuda)
         elif device.type == "mtia":
@@ -539,6 +541,7 @@ def _no_dispatch_record_stream(tensor: torch.Tensor, stream: torch.Stream) -> No
     if tensor.device.type not in [
         "cuda",
         "mtia",
+        "xpu",
         torch._C._get_privateuse1_backend_name(),
     ]:
         return
