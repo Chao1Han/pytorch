@@ -74,7 +74,8 @@ class TestFullyShardOverlap(FSDPTest):
             delay_collective()
             return orig_reduce_scatter_tensor(*args, **kwargs)
 
-        inp = torch.randn((2, dim), device="cuda")
+        device_name = "xpu" if torch.xpu.is_available() else "cuda"
+        inp = torch.randn((2, dim), device=device_name)
         loss = model(inp).sum()  # warmup CUDA and allocator
         loss.backward()
 

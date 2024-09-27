@@ -1,5 +1,7 @@
 # Owner(s): ["oncall: distributed"]
 import torch
+import intel_extension_for_pytorch
+import oneccl_bindings_for_pytorch
 import torch.distributed._functional_collectives as funcol
 import torch.distributed.tensor._random as random
 from torch.distributed._tensor import init_device_mesh, Replicate
@@ -65,7 +67,7 @@ class TensorParallelRandomStateTests(DTensorTestBase):
             # in the following way:
             #   - within a tensor parallel group, the RNG is set with the same seed
             #   - across data parallel groups, the RNG is set with different seeds
-            torch.cuda.manual_seed(dp_rank)
+            torch.xpu.manual_seed(dp_rank)
 
             # disable/enable parallel RNG feature
             random._rng_tracker.distribute_region_enabled = enable_distribute_flag

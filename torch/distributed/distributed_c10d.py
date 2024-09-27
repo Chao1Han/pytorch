@@ -2558,13 +2558,19 @@ def all_reduce(tensor, op=ReduceOp.SUM, group=None, async_op=False):
             return _IllegalWork()
         else:
             return None
-
+    # WA: Oneccl doesn't support avg op.
+    is_avg = False
+    if tensor.is_xpu and opts.reduceOp == ReduceOp.AVG:
+        is_avg = True
+        opts.reduceOp = ReduceOp.SUM
     work = group.allreduce([tensor], opts)
 
     if async_op:
         return work
     else:
         work.wait()
+        if is_avg:
+            tensor /= group.size()
 
 
 @_exception_logger
@@ -3900,13 +3906,19 @@ def reduce_scatter_tensor(output, input, op=ReduceOp.SUM, group=None, async_op=F
             return _IllegalWork()
         else:
             return None
-
+    # WA: Oneccl doesn't support avg op.
+    is_avg = False
+    if input.is_xpu and opts.reduceOp == ReduceOp.AVG:
+        is_avg = True
+        opts.reduceOp = ReduceOp.SUM
     work = group._reduce_scatter_base(output, input, opts)
 
     if async_op:
         return work
     else:
         work.wait()
+        if is_avg:
+            output /= group.size()
 
 
 @deprecated(

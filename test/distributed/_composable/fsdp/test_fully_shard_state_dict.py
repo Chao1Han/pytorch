@@ -36,7 +36,7 @@ class TestFullyShardStateDictMultiProcess(FSDPTest):
 
     @skip_if_lt_x_gpu(2)
     def test_dp_state_dict_save_load(self):
-        fsdp_mesh = init_device_mesh("cuda", (self.world_size,))
+        fsdp_mesh = init_device_mesh("xpu", (self.world_size,))
         self.run_subtests(
             {"mlp_dim": [2, 3, 4, 5], "mesh": [fsdp_mesh]},
             self._test_dp_state_dict_save_load,
