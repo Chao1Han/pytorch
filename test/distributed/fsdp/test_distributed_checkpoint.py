@@ -3,6 +3,8 @@
 import sys
 
 import torch
+
+
 from torch import distributed as dist
 from torch.distributed.checkpoint import (
     FileSystemReader,
@@ -36,10 +38,10 @@ if TEST_WITH_DEV_DBG_ASAN:
     sys.exit(0)
 
 
-_DISTRIBUTED_STATE_DICT_IMPLS = {
+_DISTRIBUTED_STATE_DICT_IMPLS = (
     StateDictType.LOCAL_STATE_DICT,
     StateDictType.SHARDED_STATE_DICT,
-}
+)
 
 
 class TestDistributedCheckpoint(FSDPTest):

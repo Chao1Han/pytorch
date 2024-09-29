@@ -37,6 +37,7 @@ from .utils import (
     build_global_metadata,
     build_metadata_from_local_shards,
 )
+from torch._utils import _get_device_module
 
 
 if TYPE_CHECKING:
@@ -372,7 +373,11 @@ class ShardedTensor(ShardedTensorBase):
         """
         if dist.get_backend(self._process_group) == dist.Backend.NCCL:
             return torch.device(torch.cuda.current_device())
-        return torch.device("cpu")
+        elif dist.get_backend(self._process_group) == dist.Backend.XCCL:
+            return torch.device(torch.xpu.current_device())
+        else:
+            print("************* [ERROR] something wrong with cc backend *************", flush=True)
+            return torch.device("cpu")
 
     def gather(  # type: ignore[override]
         self,
@@ -546,6 +551,74 @@ class ShardedTensor(ShardedTensorBase):
         )
         return st_cpu
 
+    def xpu(
+        self,
+        device=None,
+        non_blocking=False,
+        memory_format=torch.preserve_format,
+        process_group=None
+    ) -> ShardedTensor:
+        """
+        Returns a copy of this object in CUDA memory, if the original ShardedTensor
+        is on CPU, we will move the local shard to the current GPU device of each
+        process in a SPMD fashion.
+        If this ShardedTensor is already on CUDA memory and local shards on each rank are
+        already on current device, we still returns a new ShardedTensor object with new
+        metadata, but no underlying data movements are performed.
+        .. note:: When moving a ShardedTensor from CPU to GPU, the ShardedTensor might
+            need to be managed by a different type of ProcessGroup(i.e. ProcessGroupNCCL),
+            it is the user's responsiblity to explicitly pass in a new process_group that
+            is compatible with GPU.
+        """
+        if memory_format != torch.preserve_format and \
+                memory_format != torch.contiguous_format:
+            raise RuntimeError("Only `torch.contiguous_format` or "
+                               "`torch.preserve_format` is supported!")
+
+        if device is not None:
+            device = torch.device(device) if isinstance(device, str) else device
+            if device == "gpu":
+                assert isinstance(device, torch.device) and device.index == torch.cuda.current_device(), \
+                    '''Only device without device id (e.g. "cpu" or "cuda") is expected for ShardedTensor!'''
+            elif device == "xpu":
+                assert isinstance(device, torch.device) and device.index == torch.xpu.current_device(), \
+                    '''Only device without device id (e.g. "cpu" or "xpu") is expected for ShardedTensor!'''
+
+        current_device = torch.device(_get_device_module().current_device())
+        # returns a copy of ShardedTensor on CUDA current device
+        list_shards: List[Shard] = []
+        # move all local shards to current device, and change metadata
+        # if local shards already on the current device, there's no
+        # real data movement, only the metadata are copied.
+        for shard in self._local_shards:
+            xpu_tensor = shard.tensor.xpu(
+                device=current_device,
+                non_blocking=non_blocking,
+                memory_format=memory_format
+            )  # type: ignore[call-arg]
+            metadata = copy.deepcopy(shard.metadata)
+            metadata.placement._device = current_device  # type: ignore[union-attr]
+
+            list_shards.append(
+                Shard(xpu_tensor, metadata)
+            )
+
+        st_meta = copy.deepcopy(self.metadata())
+        for meta in st_meta.shards_metadata:
+            if meta.placement.device().type != "cuda":  # type: ignore[union-attr]
+                meta.placement._device = current_device  # type: ignore[union-attr]
+
+        pg = self._process_group if process_group is None else process_group
+        # we need to use `init_from_local_shards` to communicate between ranks
+        # and update the sharding spec/shards metadata.
+        st_xpu = ShardedTensor._init_from_local_shards_and_global_metadata(
+            list_shards,
+            sharded_tensor_metadata=st_meta,
+            process_group=pg,
+            init_rrefs=self._init_rrefs
+        )
+        return st_xpu
+
     def cuda(
         self,
         device=None,
@@ -576,19 +649,21 @@ class ShardedTensor(ShardedTensorBase):
 
         if device is not None:
             device = torch.device(device) if isinstance(device, str) else device
-            assert (
-                isinstance(device, torch.device)
-                and device.index == torch.cuda.current_device()
-            ), """Only device without device id (e.g. "cpu" or "cuda") is expected for ShardedTensor!"""
+            if device == "gpu":
+                assert isinstance(device, torch.device) and device.index == torch.cuda.current_device(), \
+                    '''Only device without device id (e.g. "cpu" or "cuda") is expected for ShardedTensor!'''
+            elif device == "xpu":
+                assert isinstance(device, torch.device) and device.index == torch.xpu.current_device(), \
+                    '''Only device without device id (e.g. "cpu" or "xpu") is expected for ShardedTensor!'''
 
-        current_device = torch.device(torch.cuda.current_device())
+        current_device = torch.device(_get_device_module().current_device())
         # returns a copy of ShardedTensor on CUDA current device
         list_shards: List[Shard] = []
         # move all local shards to current device, and change metadata
         # if local shards already on the current device, there's no
         # real data movement, only the metadata are copied.
         for shard in self._local_shards:
-            cuda_tensor = shard.tensor.cuda(
+            xpu_tensor = shard.tensor.xpu(
                 device=current_device,
                 non_blocking=non_blocking,
                 memory_format=memory_format,
@@ -596,11 +671,13 @@ class ShardedTensor(ShardedTensorBase):
             metadata = copy.deepcopy(shard.metadata)
             metadata.placement._device = current_device  # type: ignore[union-attr]
 
-            list_shards.append(Shard(cuda_tensor, metadata))
+            list_shards.append(
+                Shard(xpu_tensor, metadata)
+            )
 
         st_meta = copy.deepcopy(self.metadata())
         for meta in st_meta.shards_metadata:
-            if meta.placement.device().type != "cuda":  # type: ignore[union-attr]
+            if meta.placement.device().type != "cuda" or meta.placement.device().type != "xpu" :  # type: ignore[union-attr]
                 meta.placement._device = current_device  # type: ignore[union-attr]
 
         pg = self._process_group if process_group is None else process_group
@@ -620,6 +697,8 @@ class ShardedTensor(ShardedTensorBase):
             current_device = self._local_shards[0].tensor.device
         elif self._process_group._get_backend_name() == "gloo":
             current_device = torch.device("cpu")
+        elif self._process_group._get_backend_name() == "xccl":
+            current_device = torch.device(torch.xpu.current_device())
         else:
             current_device = torch.device(torch.cuda.current_device())
         current_dtype = self.dtype
@@ -652,10 +731,16 @@ class ShardedTensor(ShardedTensorBase):
             # if user specify the device index.
             current_idx = torch.cuda.current_device()
             if device_to.index != current_idx:
-                warnings.warn(
-                    "ShardedTensor.to only move tensor to its current device"
-                    "If you want to put to different device, use `reshard` instead."
-                )
+                warnings.warn("ShardedTensor.to only move tensor to its current device"
+                              "If you want to put to different device, use `reshard` instead.")
+            device_to = torch.device(current_idx)
+        elif device_to.type == "xpu":
+            # if device_to set to xpu, set to current device even
+            # if user specify the device index.
+            current_idx = torch.xpu.current_device()
+            if device_to.index != current_idx:
+                warnings.warn("ShardedTensor.to only move tensor to its current device"
+                              "If you want to put to different device, use `reshard` instead.")
             device_to = torch.device(current_idx)
 
         copy_tensor = kwargs.get("copy", False)

@@ -3,6 +3,8 @@ from collections import OrderedDict
 from copy import deepcopy
 
 import torch
+
+
 from torch.distributed._tensor import DeviceMesh, DTensor, Replicate, Shard
 from torch.distributed.tensor.parallel.api import parallelize_module
 from torch.distributed.tensor.parallel.style import (
@@ -31,7 +33,7 @@ class DummyModule(torch.nn.Module):
 class TensorParallelAPITests(DTensorTestBase):
     @property
     def world_size(self):
-        gpu_num = torch.cuda.device_count()
+        gpu_num = torch.xpu.device_count() if torch.xpu.is_available() else torch.cuda.device_count()
         return gpu_num if gpu_num % 2 == 0 and gpu_num > 4 else 4
 
     def _compare_params(

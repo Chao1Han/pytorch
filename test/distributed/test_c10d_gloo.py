@@ -47,6 +47,7 @@ from torch.testing._internal.common_distributed import (
     simple_sparse_reduce_tests,
     skip_if_lt_x_gpu,
     verify_ddp_error_logged,
+    requires_cuda,
 )
 from torch.testing._internal.common_utils import (
     retry_on_connect_failures,
@@ -358,6 +359,7 @@ class ProcessGroupGlooTest(MultiProcessTestCase):
     def test_broadcast_basics(self):
         self._test_broadcast_basics(lambda t: t.clone())
 
+    @requires_cuda()
     @skip_if_lt_x_gpu(2)
     @requires_gloo()
     def test_broadcast_basics_cuda(self):
@@ -385,6 +387,7 @@ class ProcessGroupGlooTest(MultiProcessTestCase):
         inputs = [torch.tensor([i * self.world_size + self.rank]) for i in range(1000)]
         self._test_broadcast_stress(inputs)
 
+    @requires_cuda()
     @skip_if_lt_x_gpu(2)
     @requires_gloo()
     def test_broadcast_stress_cuda(self):
@@ -459,6 +462,7 @@ class ProcessGroupGlooTest(MultiProcessTestCase):
     def test_allreduce_basics(self):
         self._test_allreduce_basics(lambda t: t.clone())
 
+    @requires_cuda()
     @skip_if_lt_x_gpu(2)
     @requires_gloo()
     def test_allreduce_basics_cuda(self):
@@ -490,6 +494,7 @@ class ProcessGroupGlooTest(MultiProcessTestCase):
         inputs = [torch.tensor([i + self.rank]) for i in range(1000)]
         self._test_allreduce_stress(inputs)
 
+    @requires_cuda()
     @skip_if_lt_x_gpu(2)
     @requires_gloo()
     def test_allreduce_stress_cuda(self):
@@ -525,6 +530,7 @@ class ProcessGroupGlooTest(MultiProcessTestCase):
             opts = c10d.AllreduceCoalescedOptions()
             pg.allreduce_coalesced([t3, t3.clone()], opts)
 
+    @requires_cuda()
     @skip_if_lt_x_gpu(1)
     @requires_gloo()
     def test_allreduce_coalesced_checks_cuda(self):
@@ -657,11 +663,13 @@ class ProcessGroupGlooTest(MultiProcessTestCase):
     def test_sparse_allreduce_basics(self):
         self._test_sparse_allreduce_basics(lambda t: t)
 
+    @requires_cuda()
     @skip_if_lt_x_gpu(2)
     @requires_gloo()
     def test_sparse_allreduce_basics_cuda(self):
         self._test_sparse_allreduce_basics(lambda t: t.clone().cuda())
 
+    @requires_cuda()
     @skip_if_lt_x_gpu(2)
     @requires_gloo()
     def test_sparse_allreduce_cuda_dispatched(self):
@@ -861,6 +869,7 @@ class ProcessGroupGlooTest(MultiProcessTestCase):
     def test_scatter_basics(self):
         self._test_scatter_basics(lambda t: t.clone())
 
+    @requires_cuda()
     @skip_if_lt_x_gpu(2)
     @requires_gloo()
     def test_scatter_basics_cuda(self):
@@ -1045,6 +1054,8 @@ class ProcessGroupGlooTest(MultiProcessTestCase):
     def test_gather_basics(self):
         self._test_gather_basics(lambda t: t.clone())
 
+
+    @requires_cuda()
     @skip_if_lt_x_gpu(2)
     @requires_gloo()
     def test_gather_basics_cuda(self):
@@ -1096,6 +1107,7 @@ class ProcessGroupGlooTest(MultiProcessTestCase):
         inputs = [torch.tensor([i + self.rank]) for i in range(1000)]
         self._test_gather_stress(inputs, lambda t: t.clone())
 
+    @requires_cuda()
     @skip_if_lt_x_gpu(2)
     @requires_gloo()
     def test_gather_stress_cuda(self):
@@ -1178,6 +1190,7 @@ class ProcessGroupGlooTest(MultiProcessTestCase):
     def test_allgather_basics(self):
         self._test_allgather_basics(lambda t: t.clone())
 
+    @requires_cuda()
     @skip_if_lt_x_gpu(2)
     @requires_gloo()
     def test_allgather_basics_cuda(self):
@@ -1226,6 +1239,7 @@ class ProcessGroupGlooTest(MultiProcessTestCase):
         inputs = [torch.tensor([i + self.rank]) for i in range(1000)]
         self._test_allgather_stress(inputs, lambda t: t.clone())
 
+    @requires_cuda()
     @skip_if_lt_x_gpu(2)
     @requires_gloo()
     def test_allgather_stress_cuda(self):
@@ -1369,6 +1383,7 @@ class ProcessGroupGlooTest(MultiProcessTestCase):
     def test_reduce_basics(self):
         self._test_reduce_basics(lambda t: t.clone())
 
+    @requires_cuda()
     @skip_if_lt_x_gpu(2)
     @requires_gloo()
     def test_reduce_basics_cuda(self):
@@ -1412,6 +1427,7 @@ class ProcessGroupGlooTest(MultiProcessTestCase):
         inputs = [torch.tensor([i + self.rank]) for i in range(1000)]
         self._test_reduce_stress(inputs)
 
+    @requires_cuda()
     @skip_if_lt_x_gpu(2)
     @requires_gloo()
     def test_reduce_stress_cuda(self):
@@ -1520,6 +1536,7 @@ class DistributedDataParallelTest(
             [torch.device("cpu")], None, gradient_as_bucket_view=True
         )
 
+    @requires_cuda()
     @requires_gloo()
     @skip_if_lt_x_gpu(2)
     def test_gloo_backend_1gpu_module_device_ids_integer_list(self):
@@ -1527,6 +1544,7 @@ class DistributedDataParallelTest(
         devices = [torch.device("cuda:" + str(i)) for i in int_devices]
         self._test_gloo_backend(devices, int_devices)
 
+    @requires_cuda()
     @requires_gloo()
     @skip_if_lt_x_gpu(2)
     def test_gloo_backend_1gpu_module_device_ids_torch_device_list(self):
@@ -1534,6 +1552,7 @@ class DistributedDataParallelTest(
         devices = [torch.device("cuda:" + str(i)) for i in int_devices]
         self._test_gloo_backend(devices, devices)
 
+    @requires_cuda()
     @requires_gloo()
     @skip_if_lt_x_gpu(4)
     def test_gloo_backend_2gpu_module(self):
@@ -1541,6 +1560,7 @@ class DistributedDataParallelTest(
         devices = [torch.device("cuda:" + str(i)) for i in int_devices]
         self._test_gloo_backend(devices, None, multi_device=True)
 
+    @requires_cuda()
     @requires_gloo()
     @skip_if_lt_x_gpu(8)
     def test_gloo_backend_4gpu_module(self):
@@ -1613,21 +1633,25 @@ class DistributedDataParallelTest(
         )
         run_and_verify_grad(gpu_model)
 
+    @requires_cuda()
     @requires_gloo()
     @skip_if_lt_x_gpu(2)
     def test_global_local_unused_params_grad(self):
         self._test_global_local_unused_params_grad()
 
+    @requires_cuda()
     @requires_gloo()
     @skip_if_lt_x_gpu(2)
     def test_global_local_unused_params_grad_with_grad_is_view(self):
         self._test_global_local_unused_params_grad(gradient_as_bucket_view=True)
 
+    @requires_cuda()
     @requires_gloo()
     @skip_if_lt_x_gpu(2)
     def test_global_local_unused_params_grad_with_static_graph(self):
         self._test_global_local_unused_params_grad(static_graph=True)
 
+    @requires_cuda()
     @requires_gloo()
     @skip_if_lt_x_gpu(2)
     def test_find_unused_parameters_when_unused_parameters_empty(self):
@@ -1769,6 +1793,7 @@ class DistributedDataParallelTest(
             loss = criterion(output, target)
             loss.backward()
 
+    @requires_cuda()
     @requires_gloo()
     @skip_if_lt_x_gpu(2)
     def test_ignored_sharded_tensor(self):
@@ -1833,6 +1858,7 @@ class DistributedDataParallelTest(
             vanilla_parameter.grad.coalesce(), ddp_parameter.grad.coalesce()
         )
 
+    @requires_cuda()
     @requires_gloo()
     @skip_if_lt_x_gpu(2)
     def test_save_load_checkpoint(self):
@@ -2000,6 +2026,7 @@ class DistributedDataParallelTest(
 
         return gpu_model
 
+    @requires_cuda()
     @requires_gloo()
     @skip_if_lt_x_gpu(2)
     def test_ddp_comm_hook_future_passing_gpu_gloo(self):
@@ -2346,6 +2373,7 @@ class CommTest(test_c10d_common.AbstractCommTest, MultiProcessTestCase):
         if self.rank != root_rank:
             self.assertEqual(tensors, target)
 
+    @requires_cuda()
     @requires_gloo()
     @skip_if_lt_x_gpu(2)
     def test_broadcast_coalesced_gloo_cuda(self):
@@ -2375,21 +2403,25 @@ class CommTest(test_c10d_common.AbstractCommTest, MultiProcessTestCase):
         for root_rank in ranks:
             self._test_broadcast_coalesced(process_group, device, root_rank)
 
+    @requires_cuda()
     @requires_gloo()
     @skip_if_lt_x_gpu(2)
     def test_sequence_num_set_default_pg_gloo(self):
         self._test_sequence_num_set_default_pg(backend="gloo")
 
+    @requires_cuda()
     @requires_gloo()
     @skip_if_lt_x_gpu(2)
     def test_sequence_num_set_gloo_new_group(self):
         self._test_sequence_num_set_new_group(backend="gloo")
 
+    @requires_cuda()
     @skip_if_lt_x_gpu(2)
     @requires_gloo()
     def test_sequence_num_incremented_gloo_default(self):
         self._test_sequence_num_incremented_default_group("gloo")
 
+    @requires_cuda()
     @skip_if_lt_x_gpu(4)
     @requires_gloo()
     def test_sequence_num_incremented_gloo_subgroup(self):
@@ -2397,21 +2429,25 @@ class CommTest(test_c10d_common.AbstractCommTest, MultiProcessTestCase):
             return skip_but_pass_in_sandcastle("Test requires world_size of at least 4")
         self._test_sequence_num_incremented_subgroup("gloo")
 
+    @requires_cuda()
     @skip_if_lt_x_gpu(2)
     @requires_gloo()
     def test_gloo_warn_not_in_group(self):
         self._test_warn_not_in_group(backend="gloo")
 
+    @requires_cuda()
     @skip_if_lt_x_gpu(2)
     @requires_gloo()
     def test_gloo_rank_membership(self):
         self._test_rank_membership(backend="gloo")
 
+    @requires_cuda()
     @skip_if_lt_x_gpu(2)
     @requires_gloo()
     def test_tensor_dtype_mismatch(self):
         self._test_tensor_dtype_mismatch(backend="gloo")
 
+    @requires_cuda()
     @skip_if_lt_x_gpu(2)
     @requires_gloo()
     def test_tensor_dtype_complex(self):

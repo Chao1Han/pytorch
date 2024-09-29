@@ -7,6 +7,8 @@ from typing import List, Optional
 from unittest.mock import patch
 
 import torch
+
+
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import distributed as dist
@@ -225,7 +227,7 @@ class TestCommunication(FSDPTest):
         # Enable execution order checking
         dist.set_debug_level(dist.DebugLevel.DETAIL)
         # Initialize the model and inputs
-        device = torch.device("cuda")
+        device = torch.device("xpu")
         fsdp_model = self._init_model(nested_model, sharding_strategy, device)
         batch = fsdp_model.module.get_input(device)
 
@@ -292,7 +294,7 @@ class TestCommunication(FSDPTest):
 class TestExplicitUnshard(FSDPTest):
     @property
     def world_size(self) -> int:
-        return min(torch.cuda.device_count(), 2)
+        return min(torch.xpu.device_count(), 2)
 
     @skip_if_lt_x_gpu(2)
     @parametrize("use_orig_params", [False, True])
@@ -350,7 +352,7 @@ class TestExplicitUnshard(FSDPTest):
         group = self.process_group
         batch_size, dim = 2, 8
         torch.manual_seed(42)
-        ref_model = DDP(ReduceModel(dim, group).cuda(), device_ids=[self.rank])
+        ref_model = DDP(ReduceModel(dim, group).xpu(), device_ids=[self.rank])
         ref_optim = torch.optim.Adam(ref_model.parameters(), lr=1e-2)
 
         torch.manual_seed(42)
@@ -366,11 +368,11 @@ class TestExplicitUnshard(FSDPTest):
         mlp_params = set(model.mlps.parameters())
         mlp_param_names = {n for n, p in model.named_parameters() if p in mlp_params}
         DDP._set_params_and_buffers_to_ignore_for_model(model, mlp_param_names)
-        model = DDP(model.cuda(), device_ids=[self.rank])
+        model = DDP(model.xpu(), device_ids=[self.rank])
         optim = torch.optim.Adam(model.parameters(), lr=1e-2)
 
         torch.manual_seed(42 + self.rank + 1)
-        inp = torch.randn((batch_size, dim), device="cuda")
+        inp = torch.randn((batch_size, dim), device="xpu")
 
         for _ in range(10):
             losses: List[torch.Tensor] = []

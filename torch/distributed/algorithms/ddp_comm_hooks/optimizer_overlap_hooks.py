@@ -6,7 +6,7 @@ from typing import Any, Callable, List, no_type_check
 import torch
 import torch.distributed as dist
 from torch.autograd import Variable
-from torch._utils import _get_device_module
+
 
 __all__: List[str] = []
 
@@ -41,7 +41,7 @@ class _OptimizerHookState:
 
 @dataclass
 class _OptimInBackwardHookState:
-    optim_stream: torch.Stream
+    optim_stream: torch.cuda.Stream
     wait_for_optim_stream_enqueued: bool
 
 
@@ -57,7 +57,7 @@ def _apply_optim_in_backward_hook(
     step for parameters after gradient communication has taken place.
     """
     optim_in_bwd_state = _OptimInBackwardHookState(
-        optim_stream=_get_device_module().Stream(),
+        optim_stream=torch.cuda.Stream(),
         wait_for_optim_stream_enqueued=False,
     )
 
@@ -99,7 +99,7 @@ def _apply_optim_in_backward_hook(
         # enqueue a callback to wait for this optimizer stream at the end of
         # backward and set all DDP managed grads to None.
         def wait_for_optim_stream_callback():
-            _get_device_module().current_stream().wait_stream(optim_stream_state.optim_stream)
+            torch.cuda.current_stream().wait_stream(optim_stream_state.optim_stream)
             # Set DDP managed grads to None
             for param in ddp_inst._get_data_parallel_params(ddp_inst.module):
                 if hasattr(param, "_in_backward_optimizers"):

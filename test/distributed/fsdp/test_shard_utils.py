@@ -1,6 +1,9 @@
 # Owner(s): ["oncall: distributed"]
 
 import torch
+
+
+
 from torch.distributed.distributed_c10d import _get_default_group
 from torch.distributed.fsdp._shard_utils import (
     _create_chunk_dtensor,
@@ -23,7 +26,7 @@ class TestShardUtilsDistributed(FSDPTest):
     def _create_tensor(self, *size):
         # Keep everything deterministic.
         torch.manual_seed(0)
-        return torch.rand(*size).cuda()
+        return torch.rand(*size).xpu()
 
     @skip_if_lt_x_gpu(2)
     def test_create_chunk_sharded_tensor(self):
@@ -34,10 +37,10 @@ class TestShardUtilsDistributed(FSDPTest):
                 tensor,
                 self.rank,
                 self.world_size,
-                torch.cuda.device_count(),
+                torch.xpu.device_count(),
                 _get_default_group(),
             )
-            output = torch.empty(*size).cuda() if self.rank == 0 else None
+            output = torch.empty(*size).xpu() if self.rank == 0 else None
             sharded_tensor.gather(0, output)
             if self.rank == 0:
                 self.assertEqual(tensor, output)
@@ -51,7 +54,7 @@ class TestShardUtilsDistributedDTensor(DTensorTestBase):
     def _create_tensor(self, *size):
         # Keep everything deterministic.
         torch.manual_seed(0)
-        return torch.rand(*size).cuda()
+        return torch.rand(*size).xpu()
 
     @with_comms
     @skip_if_lt_x_gpu(2)

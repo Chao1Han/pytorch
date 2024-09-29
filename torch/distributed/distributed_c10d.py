@@ -85,6 +85,7 @@ __all__ = [
     "is_mpi_available",
     "is_backend_available",
     "is_nccl_available",
+    "is_ccl_available",
     "is_torchelastic_launched",
     "is_ucc_available",
     "is_xccl_available",
@@ -129,6 +130,7 @@ __all__ = [
 
 _MPI_AVAILABLE = True
 _NCCL_AVAILABLE = True
+_CCL_AVAILABLE = True
 _GLOO_AVAILABLE = True
 _UCC_AVAILABLE = True
 _XCCL_AVAILABLE = True
@@ -818,6 +820,11 @@ def _get_pg_default_device(group: Optional[ProcessGroup] = None) -> torch.device
         # collective has been run?) We pick cpu as the default and hopefully
         # this would lazily init Gloo or other available cpu backend.
         _world.pg_default_device[group] = torch.device("cpu")
+    elif torch.device("xpu") in devices:
+        # There are multiple backends in this PG and cpu is among them.
+        # cpu is preferred as the object is in cpu memory. No need for device
+        # copy.
+        _world.pg_default_device[group] = torch.device("xpu")  #todo ,CCL for both CPU & GPU will fallback to CPU
     elif torch.device("cpu") in devices:
         # There are multiple backends in this PG and cpu is among them.
         # cpu is preferred as the object is in cpu memory. No need for device
@@ -1102,6 +1109,9 @@ def is_nccl_available() -> bool:
     """Check if the NCCL backend is available."""
     return _NCCL_AVAILABLE
 
+def is_ccl_available() -> bool:
+    """Check if the NCCL backend is available."""
+    return _CCL_AVAILABLE
 
 def is_gloo_available() -> bool:
     """Check if the Gloo backend is available."""
@@ -1331,6 +1341,10 @@ def _add_ephemeral_timeout_for_all_pgs(timeout: timedelta) -> None:
             backend = pg._get_backend(torch.device("cuda"))
             if is_nccl_available() and isinstance(backend, ProcessGroupNCCL):
                 backend._add_ephemeral_timeout(timeout)
+        elif torch.device("xpu") in devices:
+            backend = pg._get_backend(torch.device("xpu"))
+            if is_ccl_available():
+                backend._add_ephemeral_timeout(timeout)
 
 
 def _set_pg_timeout(timeout: timedelta, group: Optional[ProcessGroup] = None) -> None:
@@ -1374,6 +1388,9 @@ def _set_pg_timeout(timeout: timedelta, group: Optional[ProcessGroup] = None) ->
         backend = group._get_backend(torch.device("xpu"))
         if isinstance(backend, ProcessGroupXCCL):
             backends.add(backend)  # type: ignore[arg-type]
+    if torch.device("xpu") in devices:
+        backend = group._get_backend(torch.device("xpu"))
+        backends.add(backend)
     if len(backends) == 0:
         warnings.warn("Set timeout is now only supported for either nccl or gloo.")
     for backend in backends:
@@ -1613,7 +1630,8 @@ def _get_split_source(pg):
         split_from = pg._get_backend(pg.bound_device_id)
     elif pg is _world.default_pg:
         try:
-            split_from = pg._get_backend(torch.device("cuda"))
+            if torch.cuda.is_available():
+                split_from = pg._get_backend(torch.device("cuda"))
         except RuntimeError:
             # no cuda device associated with this backend
             pass
@@ -1637,7 +1655,8 @@ def _shutdown_backend(pg):
     """
     backend = None
     try:
-        backend = pg._get_backend(torch.device("cuda"))
+        if torch.cuda.is_available():
+            backend = pg._get_backend(torch.device("cuda"))
     except RuntimeError:
         pass
     if is_nccl_available() and isinstance(backend, ProcessGroupNCCL):
@@ -1711,7 +1730,10 @@ def _new_process_group_helper(
         len(global_ranks_in_group) == _get_default_group().size()
         or _get_default_group().bound_device_id
     ):
-        split_from = _get_split_source(_get_default_group())
+        if torch.xpu.is_available(): #zl_todo: no support for comm split
+            split_from = None
+        else:
+            split_from = _get_split_source(_get_default_group())
     else:
         split_from = None
 
@@ -2411,7 +2433,7 @@ def batch_isend_irecv(p2p_op_list):
     _check_p2p_op_list(p2p_op_list)
     group = p2p_op_list[0].group
     device = p2p_op_list[0].tensor.device
-    if device.type == "cuda":
+    if device.type == "cuda" or device.type == "xpu":
         # NCCL style coalescing
         with _coalescing_manager(group, device, async_ops=True) as cm:
             for p2p_op in p2p_op_list:
@@ -2543,13 +2565,19 @@ def all_reduce(tensor, op=ReduceOp.SUM, group=None, async_op=False):
             return _IllegalWork()
         else:
             return None
-
+    # WA: Oneccl doesn't support avg op.
+    is_avg = False
+    if tensor.is_xpu and opts.reduceOp == ReduceOp.AVG:
+        is_avg = True
+        opts.reduceOp = ReduceOp.SUM
     work = group.allreduce([tensor], opts)
 
     if async_op:
         return work
     else:
         work.wait()
+        if is_avg:
+            tensor /= group.size()
 
 
 @_exception_logger
@@ -3885,13 +3913,19 @@ def reduce_scatter_tensor(output, input, op=ReduceOp.SUM, group=None, async_op=F
             return _IllegalWork()
         else:
             return None
-
+    # WA: Oneccl doesn't support avg op.
+    is_avg = False
+    if input.is_xpu and opts.reduceOp == ReduceOp.AVG:
+        is_avg = True
+        opts.reduceOp = ReduceOp.SUM
     work = group._reduce_scatter_base(output, input, opts)
 
     if async_op:
         return work
     else:
         work.wait()
+        if is_avg:
+            output /= group.size()
 
 
 @deprecated(
@@ -4418,8 +4452,8 @@ def split_group(
         )
 
     parent_group_rank = parent_global_to_group_ranks[global_rank]
+    # todo: cannot support split in first upstream stage
     parent_backend = parent_pg._get_backend(torch.device("cuda"))
-
     # if the parent backend does not support splitting, raise error
     # currently this API only support NCCL backend
     if (

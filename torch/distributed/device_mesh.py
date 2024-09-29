@@ -505,12 +505,12 @@ else:
                 # Otherwise, create new pg.
                 default_group = _get_default_group()
                 ranks = list(range(get_world_size()))
-                dim_group = (
-                    new_group(backend="cpu:gloo,cuda:nccl", ranks=ranks)
-                    if torch.cuda.is_available()
-                    and get_backend(default_group) == "gloo"
-                    else default_group
-                )
+                if torch.cuda.is_available() and get_backend(default_group) == "gloo":
+                    dim_group = new_group(backend="cpu:gloo,cuda:nccl", ranks=ranks)
+                elif torch.xpu.is_available() and get_backend(default_group) == "gloo":
+                    dim_group = new_group(backend="cpu:gloo,xpu:xccl", ranks=ranks)
+                else:
+                    dim_group = default_group
                 dim_group_infos.append(
                     (
                         _get_group_tag(dim_group),

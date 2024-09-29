@@ -4,6 +4,8 @@
 import itertools
 
 import torch
+
+
 import torch.distributed._functional_collectives as funcol
 import torch.distributed.tensor._random as random
 from torch.distributed._tensor import DeviceMesh, DTensor
@@ -40,7 +42,7 @@ class DistTensorRandomInitTest(DTensorTestBase):
             self.assertEqual(local_tensor_clone, dtensor.to_local())
         else:
             # create DTensor from Tensor
-            _tensor = torch.empty(*input_size, device="cuda")
+            _tensor = torch.empty(*input_size, device="xpu")
             dtensor = distribute_tensor(_tensor, device_mesh, [Shard(1)])
 
             # DTensor random init
@@ -80,15 +82,15 @@ class DistTensorRandomOpTest(DTensorTestBase):
     @with_comms
     @skip_unless_torch_gpu
     def test_rng_tracker_init(self):
-        torch.cuda.manual_seed(self.rank)
-        object_list = [torch.cuda.initial_seed()]
+        torch.xpu.manual_seed(self.rank)
+        object_list = [torch.xpu.initial_seed()]
         broadcast_object_list(object_list)
         seed_from_rank_0 = int(object_list[0])
 
         device_mesh = DeviceMesh(self.device_type, torch.arange(self.world_size))
         # seed synchronization happens after the first `distribute_tensor` call
         dtensor = distribute_tensor(
-            torch.empty([self.world_size], device="cuda"), device_mesh, [Shard(0)]
+            torch.empty([self.world_size], device="xpu"), device_mesh, [Shard(0)]
         )
         self.assertEqual(seed_from_rank_0, random._rng_tracker.get_seed("parallel-rng"))
 
@@ -108,13 +110,13 @@ class DistTensorRandomOpTest(DTensorTestBase):
         # execution the default random seed will be different (a random value).
         # The DTensor random ops will use the same random seed even though the
         # torch random generator keeps different seeds on ranks.
-        torch.cuda.manual_seed(self.rank)
+        torch.xpu.manual_seed(self.rank)
         # TODO: add test before/after enabling distribute region
         device_mesh = DeviceMesh(self.device_type, torch.arange(self.world_size))
         size = [4, 4]
 
         dtensor = distribute_tensor(
-            torch.empty(*size, device="cuda"), device_mesh, [Shard(1)]
+            torch.empty(*size, device="xpu"), device_mesh, [Shard(1)]
         )
 
         # a random op call shifts the offset
@@ -168,7 +170,7 @@ class DistTensorRandomOpTest(DTensorTestBase):
                         local_tensor[other_slice, :],
                     )
 
-            torch.cuda.manual_seed(self.rank)
+            torch.xpu.manual_seed(self.rank)
             dtensor = fn(size, device_mesh=device_mesh, placements=[Replicate()])
             local_tensor = funcol.all_gather_tensor(
                 dtensor.to_local(), gather_dim=0, group=(device_mesh, 0)
@@ -296,7 +298,7 @@ class DistTensorRandomOpTest(DTensorTestBase):
         # torch random generator keeps different seeds on ranks. This ensures
         # that Replicate DTensor will have the same initialized results
         # across ranks.
-        torch.cuda.manual_seed(self.rank)
+        torch.xpu.manual_seed(self.rank)
         device_mesh = DeviceMesh(self.device_type, torch.arange(self.world_size))
         size = [1024, 2048]
         meta_dtensor = distribute_tensor(

@@ -27,6 +27,7 @@ from torch.distributed._composable_state import (
 )
 from torch.distributed.utils import _to_kwargs
 from torch.utils._pytree import tree_flatten, tree_map
+from torch._utils import _get_device_module
 
 from ._fsdp_api import MixedPrecisionPolicy
 from ._fsdp_common import _cast_fp_tensor, TrainingState
@@ -56,7 +57,7 @@ class FSDPStateContext:
         self.is_last_backward: bool = True
         # Optional user-provided event recorded after optimizer for the
         # all-gather streams to wait on in the root pre-forward
-        self.post_optim_event: Optional[torch.cuda.Event] = None
+        self.post_optim_event: Optional[torch.Event] = None
 
 
 def disable_if_config_true(func):
@@ -127,10 +128,10 @@ class FSDPState(_State):
                 self._comm_ctx.all_gather_stream.wait_event(event)
                 self._state_ctx.post_optim_event = None
             else:
-                current_stream = torch.cuda.current_stream()
+                current_stream = _get_device_module().current_stream()
                 self._comm_ctx.all_gather_copy_in_stream.wait_stream(current_stream)
                 self._comm_ctx.all_gather_stream.wait_stream(current_stream)
-            if self._device.type == "cuda":
+            if self._device.type == "cuda" or self._device.type == "xpu":
                 with torch.profiler.record_function("FSDP::inputs_to_device"):
                     args_tuple, kwargs_tuple = _to_kwargs(
                         args, kwargs, self._device, False
@@ -291,7 +292,7 @@ class FSDPState(_State):
             if self._state_ctx.is_last_backward:
                 self._comm_ctx.post_forward_order.clear()
                 if self._comm_ctx.reduce_scatter_state is not None:
-                    torch.cuda.current_stream().wait_event(
+                    _get_device_module().current_stream().wait_event(
                         self._comm_ctx.reduce_scatter_state.event
                     )
                     self._comm_ctx.reduce_scatter_state = None
