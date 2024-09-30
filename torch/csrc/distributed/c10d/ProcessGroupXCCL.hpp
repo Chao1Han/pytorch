@@ -64,8 +64,6 @@ class TORCH_API ProcessGroupXCCL : public Backend {
 
     void synchronize() override;
 
-    void synchronizeStream();
-
     bool wait(std::chrono::milliseconds timeout = kNoTimeout) override;
 
     c10::intrusive_ptr<c10::ivalue::Future> getFuture() override {
@@ -75,9 +73,6 @@ class TORCH_API ProcessGroupXCCL : public Backend {
     std::vector<at::Tensor> result() override {
       TORCH_CHECK(false, "ProcessGroupXCCL::WorkXCCL::result not implemented");
     }
-
-    bool checkTimeout(
-        std::optional<std::chrono::milliseconds> timeout = std::nullopt);
 
    protected:
     at::Device device_;

@@ -123,20 +123,6 @@ ProcessGroupXCCL::WorkXCCL::WorkXCCL(const WorkXCCL& w)
 
 ProcessGroupXCCL::WorkXCCL::~WorkXCCL() = default;
 
-bool ProcessGroupXCCL::WorkXCCL::checkTimeout(
-    std::optional<std::chrono::milliseconds> timeout) {
-  auto currentTimepoint = std::chrono::steady_clock::now();
-  auto timeElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-      currentTimepoint - workStartTime_);
-  std::chrono::milliseconds opTimeout = std::chrono::milliseconds(60000);
-
-  auto workTimeout = timeout ? *timeout : opTimeout;
-
-  if (timeElapsed < workTimeout)
-    return false;
-  return true;
-}
-
 bool ProcessGroupXCCL::WorkXCCL::isCompleted() {
   if (xcclEndEvent_ && xcclEndEvent_->query()) {
     return true;
@@ -145,23 +131,17 @@ bool ProcessGroupXCCL::WorkXCCL::isCompleted() {
 }
 
 void ProcessGroupXCCL::WorkXCCL::synchronize() {
-  synchronizeInternal(kNoTimeout);
-}
-
-void ProcessGroupXCCL::WorkXCCL::synchronizeStream() {
   auto currentStream = at::xpu::getCurrentXPUStream(device_.index());
-  // Block the current stream on the XCCL stream
   xcclEndEvent_->block(currentStream);
-}
-
-void ProcessGroupXCCL::WorkXCCL::synchronizeInternal(
-    std::chrono::milliseconds timeout) {
-  synchronizeStream();
-
   if (blockingWait_) {
     while (!isCompleted()) {
-      bool timedOut = checkTimeout(
-          timeout == kNoTimeout ? std::nullopt : std::make_optional(timeout));
+      bool timedOut = true;
+      auto currentTimepoint = std::chrono::steady_clock::now();
+      auto timeElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+          currentTimepoint - workStartTime_);
+      std::chrono::milliseconds opTimeout = std::chrono::milliseconds(60000);
+      if (timeElapsed < opTimeout)
+        timedOut = false;
       if (timedOut) {
         break;
       }
@@ -172,7 +152,24 @@ void ProcessGroupXCCL::WorkXCCL::synchronizeInternal(
 }
 
 bool ProcessGroupXCCL::WorkXCCL::wait(std::chrono::milliseconds timeout) {
-  synchronizeInternal(timeout);
+  auto currentStream = at::xpu::getCurrentXPUStream(device_.index());
+  xcclEndEvent_->block(currentStream);
+  if (blockingWait_) {
+    while (!isCompleted()) {
+      bool timedOut = true;
+      auto currentTimepoint = std::chrono::steady_clock::now();
+      auto timeElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+          currentTimepoint - workStartTime_);
+      std::chrono::milliseconds opTimeout = std::chrono::milliseconds(60000);
+      if (timeElapsed < timeout)
+        timedOut = false;
+      if (timedOut) {
+        break;
+      }
+      std::this_thread::sleep_for(
+          std::chrono::milliseconds(kSynchronizeBusyWaitMillis));
+    }
+  }
   return true;
 }
 
