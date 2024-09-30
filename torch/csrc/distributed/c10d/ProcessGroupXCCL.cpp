@@ -131,20 +131,27 @@ bool ProcessGroupXCCL::WorkXCCL::isCompleted() {
 }
 
 void ProcessGroupXCCL::WorkXCCL::synchronize() {
+  synchronizeInternal(kNoTimeout);
+}
+
+void ProcessGroupXCCL::WorkXCCL::synchronizeInternal(
+    std::chrono::milliseconds timeout) {
   auto currentStream = at::xpu::getCurrentXPUStream(device_.index());
   xcclEndEvent_->block(currentStream);
   if (blockingWait_) {
     while (!isCompleted()) {
-      bool timedOut = true;
       auto currentTimepoint = std::chrono::steady_clock::now();
       auto timeElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
           currentTimepoint - workStartTime_);
       std::chrono::milliseconds opTimeout = std::chrono::milliseconds(60000);
-      if (timeElapsed < opTimeout)
-        timedOut = false;
-      if (timedOut) {
-        break;
+      if (timeElapsed >= timeout) {
+        std::string exceptionMsg = c10::str(
+            "Work ran for ",
+            timeElapsed.count(),
+            " milliseconds before timing out.");
+        TORCH_CHECK(false, exceptionMsg)
       }
+
       std::this_thread::sleep_for(
           std::chrono::milliseconds(kSynchronizeBusyWaitMillis));
     }
@@ -152,24 +159,7 @@ void ProcessGroupXCCL::WorkXCCL::synchronize() {
 }
 
 bool ProcessGroupXCCL::WorkXCCL::wait(std::chrono::milliseconds timeout) {
-  auto currentStream = at::xpu::getCurrentXPUStream(device_.index());
-  xcclEndEvent_->block(currentStream);
-  if (blockingWait_) {
-    while (!isCompleted()) {
-      bool timedOut = true;
-      auto currentTimepoint = std::chrono::steady_clock::now();
-      auto timeElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-          currentTimepoint - workStartTime_);
-      std::chrono::milliseconds opTimeout = std::chrono::milliseconds(60000);
-      if (timeElapsed < timeout)
-        timedOut = false;
-      if (timedOut) {
-        break;
-      }
-      std::this_thread::sleep_for(
-          std::chrono::milliseconds(kSynchronizeBusyWaitMillis));
-    }
-  }
+  synchronizeInternal(timeout);
   return true;
 }
 
