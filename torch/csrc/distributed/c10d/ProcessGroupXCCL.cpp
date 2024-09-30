@@ -1,11 +1,9 @@
+#ifdef USE_C10D_XCCL
+
 #include <torch/csrc/distributed/c10d/ProcessGroupXCCL.hpp>
 #include <fstream>
-#include <mutex>
-#include <sstream>
-
-#ifdef USE_C10D_XCCL
-#include <exception>
 #include <map>
+#include <sstream>
 #include <stdexcept>
 #include <tuple>
 #include <unordered_set>
@@ -13,15 +11,7 @@
 
 #include <ATen/detail/FunctionTraits.h>
 #include <c10/core/DeviceType.h>
-#include <c10/util/CallOnce.h>
-#include <c10/util/Exception.h>
-#include <c10/util/Logging.h>
 #include <c10/util/Optional.h>
-#include <c10/util/irange.h>
-#include <torch/csrc/distributed/c10d/ParamCommsUtils.hpp>
-#include <torch/csrc/distributed/c10d/TraceUtils.h>
-#include <torch/csrc/distributed/c10d/Utils.hpp>
-#include <torch/torch.h>
 
 namespace c10d {
 

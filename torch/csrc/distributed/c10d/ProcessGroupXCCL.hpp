@@ -28,7 +28,6 @@
 #include <c10/xpu/XPUCachingAllocator.h>
 #include <torch/csrc/distributed/c10d/Backend.hpp>
 #include <torch/csrc/distributed/c10d/PrefixStore.hpp>
-#include <torch/csrc/distributed/c10d/Store.hpp>
 namespace c10d {
 
 static std::vector<std::string> TORCH_XCCL_BLOCKING_WAIT = {
