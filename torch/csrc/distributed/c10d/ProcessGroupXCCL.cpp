@@ -67,17 +67,15 @@ ccl::reduction getXcclReduceOp(const ReduceOp& reduceOp, at::Tensor& input) {
     return xcclOps.at(reduceOp);
   } catch (const std::out_of_range&) {
     switch (reduceOp) {
-      case ReduceOp::AVG:
-        C10_THROW_ERROR(ValueError, "Cannot use ReduceOp AVG with XCCL");
-        break;
-      case ReduceOp::BAND:
-        C10_THROW_ERROR(ValueError, "Cannot use ReduceOp.BAND with XCCL");
-        break;
-      case ReduceOp::BOR:
-        C10_THROW_ERROR(ValueError, "Cannot use ReduceOp.BOR with XCCL");
-        break;
-      case ReduceOp::BXOR:
-        C10_THROW_ERROR(ValueError, "Cannot use ReduceOp.BXOR with XCCL");
+      case c10d::ReduceOp::BAND:
+      case c10d::ReduceOp::BOR:
+      case c10d::ReduceOp::BXOR:
+      case c10d::ReduceOp::AVG:
+      case c10d::ReduceOp::PREMUL_SUM:
+        C10_THROW_ERROR(
+            ValueError,
+            "Cannot use ReduceOp." + reduce_op_to_string(reduceOp) +
+                " with XCCL");
         break;
       default:
         C10_THROW_ERROR(ValueError, "Unhandled ReduceOp");
@@ -133,7 +131,6 @@ void ProcessGroupXCCL::WorkXCCL::synchronizeInternal(
       auto currentTimepoint = std::chrono::steady_clock::now();
       auto timeElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
           currentTimepoint - workStartTime_);
-      std::chrono::milliseconds opTimeout = std::chrono::milliseconds(60000);
       if (timeElapsed >= timeout) {
         std::string exceptionMsg = c10::str(
             "Work ran for ",
