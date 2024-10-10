@@ -97,9 +97,7 @@ class TORCH_API ProcessGroupXCCL : public Backend {
           false, "ProcessGroupXCCL::WorkXCCL::isSuccess not implemented");
     }
 
-    void abort() override {
-      TORCH_CHECK(false, "ProcessGroupXCCL::WorkXCCL::abort not implemented");
-    }
+    void abort() override;
 
     void synchronize() override;
 
@@ -172,7 +170,17 @@ class TORCH_API ProcessGroupXCCL : public Backend {
       at::Tensor& input,
       at::Tensor& output,
       Fn fn,
-      OpType opType);
+      OpType opType) {
+      return collective<Fn>(
+      input,
+      output,
+      fn,
+      [](at::xpu::XPUStream&, c10::intrusive_ptr<ProcessGroupXCCL::WorkXCCL>&) {
+      },
+      [](at::xpu::XPUStream&, c10::intrusive_ptr<ProcessGroupXCCL::WorkXCCL>&) {
+      },
+      opType);
+  }
 
   template <typename Fn, typename PreProcess, typename PostProcess>
   c10::intrusive_ptr<Work> collective(
@@ -181,7 +189,28 @@ class TORCH_API ProcessGroupXCCL : public Backend {
       Fn fn,
       PreProcess pre,
       PostProcess post,
-      OpType opType);
+      OpType opType) {
+      auto inputs = std::vector<at::Tensor>{input};
+      auto outputs = std::vector<at::Tensor>{output};
+      return collective(inputs, outputs, fn, pre, post, opType);
+  }
+
+  template <typename Fn>
+  c10::intrusive_ptr<Work> collective(
+      std::vector<at::Tensor>& inputs,
+      std::vector<at::Tensor>& outputs,
+      Fn fn,
+      OpType opType) {
+      return collective<Fn>(
+      inputs,
+      outputs,
+      fn,
+      [](at::xpu::XPUStream&, c10::intrusive_ptr<ProcessGroupXCCL::WorkXCCL>&) {
+      },
+      [](at::xpu::XPUStream&, c10::intrusive_ptr<ProcessGroupXCCL::WorkXCCL>&) {
+      },
+      opType);
+  }
 
   template <typename Fn, typename PreProcess, typename PostProcess>
   c10::intrusive_ptr<Work> collective(
@@ -197,14 +226,35 @@ class TORCH_API ProcessGroupXCCL : public Backend {
       std::vector<at::Tensor>& input,
       std::vector<at::Tensor>& output,
       Fn fn,
-      OpType opType);
+      OpType opType) {
+      return collective<Fn>(
+      input,
+      output,
+      fn,
+      [](at::xpu::XPUStream&, c10::intrusive_ptr<ProcessGroupXCCL::WorkXCCL>&) {
+          ccl::group_start();
+      },
+      [](at::xpu::XPUStream&, c10::intrusive_ptr<ProcessGroupXCCL::WorkXCCL>&) {
+          ccl::group_end();
+      },
+      opType);
+   }
 
   template <typename Fn>
   c10::intrusive_ptr<Work> pointToPoint(
       at::Tensor& tensor,
       Fn fn,
       int peer,
-      OpType opType);
+      OpType opType) {
+    return pointToPoint(
+      tensor,
+      fn,
+      peer,
+      opType,
+      [](at::xpu::XPUStream&, c10::intrusive_ptr<ProcessGroupXCCL::WorkXCCL>&) {
+      },
+      [](at::xpu::XPUStream&) {});
+  }
 
   template <typename Fn, typename PreProcess, typename PostProcess>
   c10::intrusive_ptr<Work> pointToPoint(
@@ -325,8 +375,6 @@ class TORCH_API ProcessGroupXCCL : public Backend {
  protected:
   std::unordered_map<std::string, at::xpu::XPUStream> xcclStreams_;
   std::unordered_map<std::string, at::xpu::XPUEvent> xcclEvents_;
-  std::unordered_map<std::string, std::shared_ptr<xcclComm_t>>
-      inInitializationCommMap_;
   std::unordered_map<std::string, std::shared_ptr<xcclComm_t>> devXCCLCommMap_;
   c10::intrusive_ptr<Store> store_;
   std::mutex mutex_;
