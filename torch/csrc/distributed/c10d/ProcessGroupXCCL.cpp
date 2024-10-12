@@ -10,7 +10,6 @@
 #include <unordered_set>
 #include <utility>
 
-#include <ATen/detail/FunctionTraits.h>
 #include <c10/core/DeviceType.h>
 #include <c10/util/Optional.h>
 
@@ -242,10 +241,6 @@ c10::intrusive_ptr<Work> ProcessGroupXCCL::collective(
     PreProcess pre,
     PostProcess post,
     OpType opType) {
-  using traits = function_traits<Fn>;
-  using attr_t = typename traits::template arg<2>::type;
-  attr_t attr = ccl::create_operation_attr<attr_t>();
-
   auto device = inputs[0].device();
   const auto key = std::to_string(device.index());
   auto comm = getXCCLComm(key, device);
@@ -264,7 +259,7 @@ c10::intrusive_ptr<Work> ProcessGroupXCCL::collective(
   for (const auto i : c10::irange(inputs.size())) {
     c10::xpu::XPUCachingAllocator::recordStream(
         inputs[i].storage().data_ptr(), stream);
-    fn(inputs[i], outputs[i], attr, *comm, stream);
+    fn(inputs[i], outputs[i], *comm, stream);
   }
   post(stream, work);
 
@@ -293,7 +288,6 @@ c10::intrusive_ptr<Work> ProcessGroupXCCL::allreduce(
       tensor,
       [&](at::Tensor& input,
           at::Tensor& output,
-          ccl::allreduce_attr attr,
           xcclComm_t& comm,
           at::xpu::XPUStream& stream) {
         auto xcclDataType = getXcclDataType(input.scalar_type(), true);
@@ -306,8 +300,7 @@ c10::intrusive_ptr<Work> ProcessGroupXCCL::allreduce(
             xcclDataType,
             xcclReduceOp,
             comm,
-            ccl_stream,
-            attr);
+            ccl_stream);
         return;
       },
       OpType::ALLREDUCE);
