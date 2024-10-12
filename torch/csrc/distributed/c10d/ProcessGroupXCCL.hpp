@@ -52,11 +52,6 @@ class TORCH_API ProcessGroupXCCL : public Backend {
 
     bool isCompleted() override;
 
-    bool isSuccess() const override {
-      TORCH_CHECK(
-          false, "ProcessGroupXCCL::WorkXCCL::isSuccess not implemented");
-    }
-
     void abort() override {
       TORCH_CHECK(false, "ProcessGroupXCCL::WorkXCCL::abort not implemented");
     }
@@ -157,6 +152,7 @@ class TORCH_API ProcessGroupXCCL : public Backend {
 
  protected:
   std::unordered_map<std::string, at::xpu::XPUStream> xcclStreamsMap_;
+  std::unordered_map<std::string, at::xpu::XPUEvent> xcclEventsMap_;
   std::unordered_map<std::string, std::shared_ptr<xcclComm_t>> devXCCLCommMap_;
   c10::intrusive_ptr<Store> store_;
   std::mutex mutex_;

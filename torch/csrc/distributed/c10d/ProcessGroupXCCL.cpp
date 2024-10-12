@@ -79,10 +79,16 @@ ccl::reduction getXcclReduceOp(const ReduceOp& reduceOp, at::Tensor& input) {
   }
 }
 
+void syncStream(
+    at::Device& device,
+    at::xpu::XPUEvent& xcclEvent,
+    at::xpu::XPUStream& xcclStream) {
+  xcclEvent.record(at::xpu::getCurrentXPUStream(device.index()));
+  xcclEvent.block(xcclStream);
+}
+
 } // namespace
 
-static std::mutex xcclCommDevIdxMapMutex;
-static std::unordered_map<std::shared_ptr<xcclComm_t>, int> xcclCommDevIdxMap;
 constexpr int64_t kSynchronizeBusyWaitMillis = 10;
 
 ProcessGroupXCCL::WorkXCCL::WorkXCCL(
@@ -223,6 +229,7 @@ std::shared_ptr<xcclComm_t> ProcessGroupXCCL::getXCCLComm(
   }
 
   xcclStreamsMap_.emplace(deviceKey, std::move(stream));
+  xcclEventsMap_.emplace(deviceKey, at::xpu::XPUEvent());
 
   return XCCLComm;
 }
@@ -244,6 +251,7 @@ c10::intrusive_ptr<Work> ProcessGroupXCCL::collective(
   auto comm = getXCCLComm(key, device);
 
   auto stream = xcclStreamsMap_.at(key);
+  syncStream(device, xcclEventsMap_[key], stream);
 
   c10::intrusive_ptr<ProcessGroupXCCL::WorkXCCL> work;
   work = initWork(device, rank_, opType);
