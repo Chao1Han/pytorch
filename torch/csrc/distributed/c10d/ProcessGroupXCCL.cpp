@@ -1,5 +1,6 @@
 #ifdef USE_C10D_XCCL
 
+#include <comm/XPUGuard.h>
 #include <torch/csrc/distributed/c10d/ProcessGroupXCCL.hpp>
 #include <fstream>
 #include <map>
@@ -218,32 +219,18 @@ std::shared_ptr<xcclComm_t> ProcessGroupXCCL::getXCCLComm(
 
   {
     std::lock_guard<std::mutex> lock(mutex_);
-    inInitializationCommMap_.emplace(deviceKey, XCCLComm);
+    devXCCLCommMap_.emplace(deviceKey, XCCLComm);
   }
 
   xcclStreamsMap_.emplace(deviceKey, std::move(stream));
 
-  auto it = inInitializationCommMap_.find(deviceKey);
-  if (it != inInitializationCommMap_.end()) {
-    devXCCLCommMap_.emplace(deviceKey, std::move(it->second));
-    inInitializationCommMap_.erase(deviceKey);
-
-    xcclCommDevIdxMapMutex.lock();
-    xcclCommDevIdxMap.emplace(XCCLComm, device.index());
-    xcclCommDevIdxMapMutex.unlock();
-  }
-
-  it = devXCCLCommMap_.find(deviceKey);
-  TORCH_INTERNAL_ASSERT(
-      it != devXCCLCommMap_.end(), "Communicators not populated in cache!");
-
-  return it->second;
+  return XCCLComm;
 }
 
 template <typename Fn, typename PreProcess, typename PostProcess>
 c10::intrusive_ptr<Work> ProcessGroupXCCL::collective(
-    at::Tensor& input,
-    at::Tensor& output,
+    std::vector<at::Tensor>& inputs,
+    std::vector<at::Tensor>& outputs,
     Fn fn,
     PreProcess pre,
     PostProcess post,
@@ -252,25 +239,26 @@ c10::intrusive_ptr<Work> ProcessGroupXCCL::collective(
   using attr_t = typename traits::template arg<2>::type;
   attr_t attr = ccl::create_operation_attr<attr_t>();
 
-  auto device = input.device();
+  auto device = inputs[0].device();
   const auto key = std::to_string(device.index());
   auto comm = getXCCLComm(key, device);
 
   auto stream = xcclStreamsMap_.at(key);
-  std::vector<at::Tensor> outputs{output};
 
   c10::intrusive_ptr<ProcessGroupXCCL::WorkXCCL> work;
-
   work = initWork(device, rank_, opType);
 
-  work->outputs_ =
-      std::make_shared<std::vector<at::Tensor>>(std::move(outputs));
-  c10::xpu::XPUCachingAllocator::recordStream(
-      input.storage().data_ptr(), stream);
+  work->outputs_ = std::make_shared<std::vector<at::Tensor>>(outputs);
 
-  auto ccl_stream = ccl::create_stream(stream.queue());
+  at::xpu::OptionalXPUGuard gpuGuard(device);
 
-  fn(input, output, attr, *comm, ccl_stream);
+  pre(stream, work);
+  for (const auto i : c10::irange(inputs.size())) {
+    c10::xpu::XPUCachingAllocator::recordStream(
+        inputs[i].storage().data_ptr(), stream);
+    fn(inputs[i], outputs[i], attr, *comm, stream);
+  }
+  post(stream, work);
 
   work->xcclEndEvent_->record(stream);
 
@@ -283,23 +271,6 @@ c10::intrusive_ptr<Work> ProcessGroupXCCL::collective(
   work->blockingWait_ = blockingWait_;
 
   return work;
-}
-
-template <typename Fn>
-c10::intrusive_ptr<Work> ProcessGroupXCCL::collective(
-    at::Tensor& input,
-    at::Tensor& output,
-    Fn fn,
-    OpType opType) {
-  return collective<Fn>(
-      input,
-      output,
-      fn,
-      [](at::xpu::XPUStream&,
-         c10::intrusive_ptr<ProcessGroupXCCL::WorkXCCL>& work) {},
-      [](at::xpu::XPUStream&,
-         c10::intrusive_ptr<ProcessGroupXCCL::WorkXCCL>& work) {},
-      opType);
 }
 
 c10::intrusive_ptr<Work> ProcessGroupXCCL::allreduce(
@@ -316,20 +287,20 @@ c10::intrusive_ptr<Work> ProcessGroupXCCL::allreduce(
           at::Tensor& output,
           ccl::allreduce_attr attr,
           xcclComm_t& comm,
-          ccl::stream& stream) {
+          at::xpu::XPUStream& stream) {
         auto xcclDataType = getXcclDataType(input.scalar_type(), true);
         auto xcclReduceOp = getXcclReduceOp(opts.reduceOp, input);
-        ccl::event ret_evt;
-        ret_evt = ccl::allreduce(
+        auto ccl_stream = ccl::create_stream(stream.queue());
+        ccl::allreduce(
             input.data_ptr(),
             output.data_ptr(),
             (size_t)input.numel(),
             xcclDataType,
             xcclReduceOp,
             comm,
-            stream,
+            ccl_stream,
             attr);
-        return ret_evt;
+        return;
       },
       OpType::ALLREDUCE);
 }
