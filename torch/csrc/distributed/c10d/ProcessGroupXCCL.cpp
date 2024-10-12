@@ -72,21 +72,9 @@ ccl::reduction getXcclReduceOp(const ReduceOp& reduceOp, at::Tensor& input) {
     }
     return xcclOps.at(reduceOp);
   } catch (const std::out_of_range&) {
-    switch (reduceOp) {
-      case c10d::ReduceOp::BAND:
-      case c10d::ReduceOp::BOR:
-      case c10d::ReduceOp::BXOR:
-      case c10d::ReduceOp::AVG:
-      case c10d::ReduceOp::PREMUL_SUM:
-        C10_THROW_ERROR(
-            ValueError,
-            "Cannot use ReduceOp." + reduce_op_to_string(reduceOp) +
-                " with XCCL");
-        break;
-      default:
-        C10_THROW_ERROR(ValueError, "Unhandled ReduceOp");
-        break;
-    }
+    C10_THROW_ERROR(
+        ValueError,
+        "Cannot use ReduceOp." + reduce_op_to_string(reduceOp) + " with XCCL");
   }
 }
 
