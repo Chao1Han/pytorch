@@ -6,8 +6,14 @@
 
 include(FindPackageHandleStandardArgs)
 
+# include FindMKL.cmake to use its variables
+include(FindMKL)
+
 set(XCCL_ROOT "")
-if(DEFINED ENV{CCL_ROOT})
+if (EXISTS "${DEFAULT_INTEL_COMPILER_DIR}/ccl/latest")
+  SET(XCCL_ROOT "${DEFAULT_INTEL_COMPILER_DIR}/ccl/latest")
+elseif(DEFINED ENV{CCL_ROOT})
+  message(STATUS "Default OneCCL not found, using current environment OneCCL")
   set(XCCL_ROOT $ENV{CCL_ROOT})
 endif()
 
