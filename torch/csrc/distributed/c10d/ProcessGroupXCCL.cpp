@@ -36,15 +36,21 @@ std::map<at::ScalarType, ccl::datatype> xcclDatatypes = {
 };
 
 void check_xpu_single_tensor(const at::Tensor& tensor) {
-  if (!tensor.is_xpu() || tensor.is_sparse()) {
-    C10_THROW_ERROR(ValueError, "Tensors must be XPU and dense");
-  }
-  if (!tensor.is_contiguous(tensor.suggest_memory_format())) {
-    C10_THROW_ERROR(ValueError, "Tensors must be contiguous");
+  if (!tensor.is_xpu() || tensor.is_sparse() || tensor.is_complex()) {
+    C10_THROW_ERROR(
+        ValueError, "Tensors must be XPU and dense and non-complex");
+    if (!tensor.is_contiguous(tensor.suggest_memory_format())) {
+      C10_THROW_ERROR(ValueError, "Tensors must be contiguous");
+    }
   }
 }
 
-ccl::datatype getXcclDataType(at::ScalarType type) {
+ccl::datatype getXcclDataType(
+    at::ScalarType type,
+    bool is_reduction_op = false) {
+  TORCH_CHECK(
+      !isFloat8Type(type) && is_reduction_op,
+      "Float8 dtypes are not currenlty supported for XCCL reductions");
   auto it = xcclDatatypes.find(type);
   TORCH_CHECK_WITH(
       TypeError,
@@ -58,9 +64,9 @@ ccl::reduction getXcclReduceOp(const ReduceOp& reduceOp, at::Tensor& input) {
   try {
     if (input.scalar_type() == at::kBool) {
       if (reduceOp == ReduceOp::SUM) {
-        // For bool tensors, map sum to max, which both represent a bitwise or.
-        // This is to prevent overflow issues with sum, since we use uint8 to
-        // represent a bool (see xcclDatatypes mapping align with cuda).
+        // For bool tensors, map sum to max, which both represent a bitwise
+        // or. This is to prevent overflow issues with sum, since we use uint8
+        // to represent a bool (see xcclDatatypes mapping align with cuda).
         return ccl::reduction::max;
       }
     }
@@ -227,7 +233,7 @@ std::shared_ptr<xcclComm_t> ProcessGroupXCCL::getXCCLComm(
     inInitializationCommMap_.emplace(deviceKey, XCCLComm);
   }
 
-  xcclStreams_.emplace(deviceKey, std::move(stream));
+  xcclStreamsMap_.emplace(deviceKey, std::move(stream));
 
   auto it = inInitializationCommMap_.find(deviceKey);
   if (it != inInitializationCommMap_.end()) {
@@ -262,7 +268,7 @@ c10::intrusive_ptr<Work> ProcessGroupXCCL::collective(
   const auto key = std::to_string(device.index());
   auto comm = getXCCLComm(key, device);
 
-  auto stream = xcclStreams_.at(key);
+  auto stream = xcclStreamsMap_.at(key);
   std::vector<at::Tensor> outputs{output};
 
   c10::intrusive_ptr<ProcessGroupXCCL::WorkXCCL> work;
@@ -323,7 +329,7 @@ c10::intrusive_ptr<Work> ProcessGroupXCCL::allreduce(
           ccl::allreduce_attr attr,
           xcclComm_t& comm,
           ccl::stream& stream) {
-        auto xcclDataType = getXcclDataType(input.scalar_type());
+        auto xcclDataType = getXcclDataType(input.scalar_type(), true);
         auto xcclReduceOp = getXcclReduceOp(opts.reduceOp, input);
         ccl::event ret_evt;
         ret_evt = ccl::allreduce(
