@@ -63,7 +63,7 @@ ccl::datatype getXcclDataType(
 ccl::reduction getXcclReduceOp(const ReduceOp& reduceOp, at::Tensor& input) {
   try {
     if (input.scalar_type() == at::kBool && reduceOp == ReduceOp::SUM) {
-        // Map sum to max for bool tensors to avoid overflow issues with sum.
+      // Map sum to max for bool tensors to avoid overflow issues with sum.
       return ccl::reduction::max;
     }
     return xcclOps.at(reduceOp);
@@ -127,9 +127,7 @@ void ProcessGroupXCCL::WorkXCCL::synchronizeInternal(
           currentTimepoint - workStartTime_);
       if (timeElapsed >= timeout) {
         std::string exceptionMsg = c10::str(
-            "Work ran time out after ",
-            timeElapsed.count(),
-            " milliseconds.");
+            "Work ran time out after ", timeElapsed.count(), " milliseconds.");
         TORCH_CHECK(false, exceptionMsg)
       }
       std::this_thread::sleep_for(
@@ -168,7 +166,10 @@ c10::intrusive_ptr<ProcessGroupXCCL::WorkXCCL> ProcessGroupXCCL::initWork(
 std::shared_ptr<xcclComm_t> ProcessGroupXCCL::getXCCLComm(
     const std::string& deviceKey,
     at::Device& device) {
-  TORCH_CHECK_WITH(DistBackendError, deviceKey.empty(), "Not able to create/get "
+  TORCH_CHECK_WITH(
+      DistBackendError,
+      !deviceKey.empty(),
+      "Not able to create/get "
       "XCCL Communicator since the devices are empty ");
   {
     // todo: why do we need mutex here?
@@ -192,7 +193,8 @@ std::shared_ptr<xcclComm_t> ProcessGroupXCCL::getXCCLComm(
 
   auto xccl_kvs = get_kvs(rank_, *store_);
   auto comms = ccl::create_communicators(numRanks, devs_rank, ctx, xccl_kvs);
-  std::shared_ptr<xcclComm_t> XCCLComm = std::make_shared<xcclComm_t>(std::move(comms[0]));
+  std::shared_ptr<xcclComm_t> XCCLComm =
+      std::make_shared<xcclComm_t>(std::move(comms[0]));
 
   std::lock_guard<std::mutex> lock(mutex_);
   devXCCLCommMap_.emplace(deviceKey, XCCLComm);
