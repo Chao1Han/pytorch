@@ -184,7 +184,8 @@ std::shared_ptr<xcclComm_t> ProcessGroupXCCL::getXCCLComm(
   rank = getRank();
 
   c10::impl::VirtualGuardImpl impl(device.type());
-  c10::Stream stream = impl.getStream(device);
+  c10::Stream stream =
+      impl.getStreamFromGlobalPool(device, /*isHighPriority=*/false);
   sycl::queue& q = c10::xpu::XPUStream(stream).queue();
 
   auto ctx = ccl::create_context(q.get_context());
