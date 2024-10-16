@@ -1,6 +1,7 @@
 #ifdef USE_C10D_XCCL
 
 #include <comm/XPUGuard.h>
+#include <torch/csrc/distributed/c10d/ParamCommsUtils.hpp>
 #include <torch/csrc/distributed/c10d/ProcessGroupXCCL.hpp>
 #include <fstream>
 #include <map>
@@ -252,6 +253,25 @@ c10::intrusive_ptr<Work> ProcessGroupXCCL::allreduce(
       tensors.size() == 1, "Expecting one tensor only but got multiple");
   auto tensor = tensors.back();
   checkXPUTensor(tensor);
+
+  RECORD_PARAM_COMMS_DATA(
+      // static_cast<int>(
+      //     this->getSequenceNumberForGroup() + 1), // seq + 1 to match collective
+      1,
+      std::make_tuple(pg_uid_, pg_desc_), // PG name tuple
+      tensors, // inputTensors
+      tensors, // outputTensors
+      rank_, // rank
+      "allreduce", // collective name
+      tensor.numel(), // inNelems
+      tensor.numel(), // outNelems
+      tensor.scalar_type(), // dType
+      std::vector<int64_t>(), // inSplitSizes
+      std::vector<int64_t>(), // outSplitSizes
+      0, // globalRankStart
+      1, // globalRankStride
+      this->getSize()); // worldSize
+
   return collective(
       tensor,
       tensor,
