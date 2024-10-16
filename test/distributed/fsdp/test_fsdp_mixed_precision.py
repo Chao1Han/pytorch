@@ -9,6 +9,8 @@ from itertools import product
 from typing import Any, Dict, List
 
 import torch
+
+
 import torch.cuda.nccl as nccl
 import torch.nn as nn
 import torch.nn.functional as F
@@ -88,7 +90,10 @@ mp_only_param_and_buf = MixedPrecision(
 # Nothing is cast (thus param, comm, grad, and buffer should be in the full precision)
 mp_no_mixed_precision = MixedPrecision()
 
-nccl_supports_bf16 = dist.is_nccl_available() and nccl.version() >= (2, 10)
+if torch.cuda.is_available():
+    nccl_supports_bf16 = dist.is_nccl_available() and nccl.version() >= (2, 10)
+elif torch.xpu.is_available():
+    nccl_supports_bf16 = dist.is_ccl_available()
 
 mp_configs = [default_mp, mp_only_reduce, mp_only_param_and_buf, mp_no_mixed_precision]
 if nccl_supports_bf16:
@@ -251,13 +256,13 @@ class TestFSDPMixedPrecision(FSDPTest):
                 FSDP(
                     LinearMixedPrecision(
                         param_dtype, buffer_name="buffer0", run_checks=run_checks
-                    ).cuda(),
+                    ).xpu(),
                     *fsdp_args,
                     **fsdp_kwargs,
                 ),
                 LinearMixedPrecision(
                     param_dtype, buffer_name="buffer1", run_checks=run_checks
-                ).cuda(),
+                ).xpu(),
             ),
             *fsdp_args,
             **fsdp_kwargs,
@@ -270,10 +275,10 @@ class TestFSDPMixedPrecision(FSDPTest):
         model = nn.Sequential(
             LinearMixedPrecision(
                 param_dtype, buffer_name="buffer0", run_checks=run_checks
-            ).cuda(),
+            ).xpu(),
             LinearMixedPrecision(
                 param_dtype, buffer_name="buffer1", run_checks=run_checks
-            ).cuda(),
+            ).xpu(),
         )
         fully_shard(model[0], *fsdp_args, **fsdp_kwargs)
         fully_shard(model, *fsdp_args, **fsdp_kwargs)
@@ -281,7 +286,7 @@ class TestFSDPMixedPrecision(FSDPTest):
 
     def _get_simple_model(self, param_dtype, *fsdp_args, **fsdp_kwargs):
         model = FSDP(
-            LinearMixedPrecision(param_dtype).cuda(), *fsdp_args, **fsdp_kwargs
+            LinearMixedPrecision(param_dtype).xpu(), *fsdp_args, **fsdp_kwargs
         )
         return model
 
@@ -361,7 +366,7 @@ class TestFSDPMixedPrecision(FSDPTest):
             def forward(self, x):
                 return self.lin2(self.lin1(x))
 
-        m = MyModel().cuda()
+        m = MyModel().xpu()
         mp = MixedPrecision(
             param_dtype=torch.float16,
             reduce_dtype=torch.float16,
@@ -394,7 +399,7 @@ class TestFSDPMixedPrecision(FSDPTest):
         sharding_strategy,
         enable_sharded_grad_scaler,
     ):
-        torch.cuda.set_device(self.rank)
+        torch.xpu.set_device(self.rank)
         fsdp_models = [
             self._get_simple_model(
                 param_dtype=full_precision_param_dtype,
@@ -416,7 +421,7 @@ class TestFSDPMixedPrecision(FSDPTest):
         ]
         for model in fsdp_models:
             if not cpu_offload.offload_params:
-                model.cuda()
+                model.xpu()
 
             # Patch reduce_scatter to add validation for mixed precision types.
             orig_reduce_scatter = dist.reduce_scatter_tensor
@@ -432,7 +437,7 @@ class TestFSDPMixedPrecision(FSDPTest):
 
                 for _ in range(3):
                     inp = torch.randn(
-                        3, 10, device="cuda", dtype=full_precision_param_dtype
+                        3, 10, device="xpu", dtype=full_precision_param_dtype
                     )
                     # Forward pass of LinearMixedPrecision check casting of
                     # inputs, params, buffers.
@@ -607,11 +612,11 @@ class TestFSDPMixedPrecisionSharded(TestFSDPMixedPrecision):
             fsdp_model = FSDP(model, mixed_precision=mp_config)
             optim = torch.optim.SGD(fsdp_model.parameters(), lr=0.1)
             for _ in range(6):
-                inp = fsdp_model.module.get_input(torch.device("cuda"))
+                inp = fsdp_model.module.get_input(torch.device("xpu"))
                 # This would fail if we casted integer module inputs such as for
                 # embedding tables.
                 output = fsdp_model(*inp)
-                loss = fsdp_model.module.get_loss(inp, output).cuda()
+                loss = fsdp_model.module.get_loss(inp, output).xpu()
                 self.assertEqual(loss.dtype, param_dtype)
                 fsdp_model.module.run_backward(loss)
                 optim.step()
@@ -658,14 +663,14 @@ class TestFSDPMixedPrecisionSharded(TestFSDPMixedPrecision):
         End to end test to ensure mixed precision + auto_wrap works
         for ResNet model.
         """
-        resnet_model = torchvision.models.resnet50().cuda()
+        resnet_model = torchvision.models.resnet50().xpu()
         resnet_model = nn.SyncBatchNorm.convert_sync_batchnorm(
             resnet_model, process_group=dist.distributed_c10d._get_default_group()
         )
         n_bn = sum(
             1 if isinstance(x, _BatchNorm) else 0 for x in resnet_model.modules()
         )
-        inp = torch.ones(1, 3, 1000, 1000, device="cuda")
+        inp = torch.ones(1, 3, 1000, 1000, device="xpu")
         mp_config = MixedPrecision(
             param_dtype=torch.float16,
             reduce_dtype=torch.float16,
@@ -724,7 +729,7 @@ class TestFSDPMixedPrecisionSharded(TestFSDPMixedPrecision):
         def never_wrap_policy(*args, **kwargs):
             return False
 
-        net = BatchNormNet().cuda()
+        net = BatchNormNet().xpu()
         if convert_sync_bn:
             net = nn.SyncBatchNorm.convert_sync_batchnorm(net)
         # FSDP detects that mixed precision + batchnorm will cause issues
@@ -757,7 +762,7 @@ class TestFSDPMixedPrecisionSharded(TestFSDPMixedPrecision):
         # Overall mixed precision is still enabled
         self.assertEqual(mp_config, model.mixed_precision)
 
-        inp = torch.randn((1, 2), device="cuda")
+        inp = torch.randn((1, 2), device="xpu")
         # Without FSDP BN mixed precision fix, this would result in
         # RuntimeError: Expected counts to have type Half but got Float
         # for syncBN
@@ -798,7 +803,7 @@ class TestFSDPMixedPrecisionSharded(TestFSDPMixedPrecision):
             os.environ["FSDP_USE_FULL_PREC_IN_EVAL"] = (
                 "1" if use_full_prec_in_eval else "0"
             )
-            m = MyModel().cuda()
+            m = MyModel().xpu()
             m.a = FSDP(m.a, mixed_precision=mp_config)
             model = FSDP(m, mixed_precision=mp_config)
             model.eval()
@@ -839,9 +844,9 @@ class TestFSDPMixedPrecisionSharded(TestFSDPMixedPrecision):
                 )
                 fully_shard(model, policy=auto_wrap_policy, mixed_precision=mp_config)
             module_accessor = model if use_composable else model
-            inp = module_accessor.get_input(torch.device("cuda"))
+            inp = module_accessor.get_input(torch.device("xpu"))
             output = model(*inp)
-            loss = module_accessor.get_loss(inp, output).cuda()
+            loss = module_accessor.get_loss(inp, output).xpu()
             # Loss should be in fp16
             self.assertEqual(torch.float16, loss.dtype)
             module_accessor.run_backward(loss)
@@ -852,9 +857,9 @@ class TestFSDPMixedPrecisionSharded(TestFSDPMixedPrecision):
 
             # Now in eval mode, loss should be fp32 if use_full_prec_in_eval is set.
             model.eval()
-            inp = module_accessor.get_input(torch.device("cuda"))
+            inp = module_accessor.get_input(torch.device("xpu"))
             output = model(*inp)
-            loss = module_accessor.get_loss(inp, output).cuda()
+            loss = module_accessor.get_loss(inp, output).xpu()
             expected_dtype = torch.float32 if use_full_prec_in_eval else torch.float16
             self.assertEqual(expected_dtype, loss.dtype)
 
@@ -889,7 +894,7 @@ class TestFSDPMixedPrecisionSharded(TestFSDPMixedPrecision):
                 mixed_precision=mp_config,
             )
 
-            inp = torch.randn(3, 10, device="cuda")
+            inp = torch.randn(3, 10, device="xpu")
             fsdp_model((inp, self, fsdp_model, mp_config, torch.float32))
             for buf in fsdp_model.buffers():
                 self.assertEqual(torch.float16, buf.dtype)
@@ -979,9 +984,9 @@ class TestFSDPMixedPrecisionSharded(TestFSDPMixedPrecision):
             )
             model.eval()
             with patch_reduce_scatter(test_reduce_scatter, torch.float32):
-                inp = model_accessor.get_input(torch.device("cuda"))
+                inp = model_accessor.get_input(torch.device("xpu"))
                 output = model(*inp)
-                loss = model_accessor.get_loss(inp, output).cuda()
+                loss = model_accessor.get_loss(inp, output).xpu()
                 model_accessor.run_backward(loss)
 
     @skip_if_lt_x_gpu(2)
@@ -1018,14 +1023,14 @@ class TestFSDPMixedPrecisionSharded(TestFSDPMixedPrecision):
             model,
             sharding_strategy=sharding_strategy,
             mixed_precision=mixed_precision,
-            device_id=torch.cuda.current_device(),
+            device_id=torch.xpu.current_device(),
             use_orig_params=use_orig_params,
         )
         # Use an input with dtype not equal to the mixed precision
         # `param_dtype` so that it gets cast
         x_float = torch.randn(
             (32, 1024),
-            device="cuda",
+            device="xpu",
             dtype=torch.float32,
             requires_grad=True,
         )
@@ -1111,7 +1116,7 @@ class TestFSDPMixedPrecisionIgnoredModules(FSDPTest):
 
     @skip_if_lt_x_gpu(1)
     def test_mixed_precision_with_ignored_module(self):
-        model = ModelWithIgnoredModule().cuda()
+        model = ModelWithIgnoredModule().xpu()
         float16 = MixedPrecision(param_dtype=torch.float16)
         model = FSDP(
             model,
@@ -1119,7 +1124,7 @@ class TestFSDPMixedPrecisionIgnoredModules(FSDPTest):
             mixed_precision=float16,
         )
 
-        x = torch.ones(2, 100, device=torch.cuda.current_device())
+        x = torch.ones(2, 100, device=torch.xpu.current_device())
 
         with self.assertRaisesRegex(RuntimeError, "must have the same dtype"):
             model(x).sum().backward()
@@ -1138,9 +1143,9 @@ class TestFSDPDifferentSubmodulePrecision(FSDPTest):
         model = SaveForwardInputsModel(
             forward_inputs,
             cast_forward_inputs=False,
-        ).cuda()
+        ).xpu()
         c1, c2 = model.c1, model.c2
-        x = torch.zeros(2, 100, device="cuda")
+        x = torch.zeros(2, 100, device="xpu")
 
         # float16 on one submodule and float32 on everything else
         model.c2 = FSDP(model.c2, mixed_precision=float16)
@@ -1159,9 +1164,9 @@ class TestFSDPDifferentSubmodulePrecision(FSDPTest):
 
         model = SaveForwardInputsModel(
             forward_inputs=forward_inputs, cast_forward_inputs=True
-        ).cuda()
+        ).xpu()
         c1, c2 = model.c1, model.c2
-        x = torch.zeros(2, 100, device="cuda")
+        x = torch.zeros(2, 100, device="xpu")
 
         # float16 on one submodule and float32 on everything else
         model.c2 = FSDP(model.c2, mixed_precision=float16)
@@ -1180,9 +1185,9 @@ class TestFSDPDifferentSubmodulePrecision(FSDPTest):
 
         model = SaveForwardInputsModel(
             forward_inputs=forward_inputs, cast_forward_inputs=False
-        ).cuda()
+        ).xpu()
         c1, c2 = model.c1, model.c2
-        x = torch.zeros(2, 100, device="cuda")
+        x = torch.zeros(2, 100, device="xpu")
 
         # float16 on one submodule and float32 on everything else
         model.c2 = FSDP(model.c2, mixed_precision=float16)
@@ -1201,8 +1206,8 @@ class TestFSDPDifferentSubmodulePrecision(FSDPTest):
 
         model = SaveForwardInputsModel(
             forward_inputs=forward_inputs, cast_forward_inputs=False
-        ).cuda()
-        x = torch.zeros(2, 100, device="cuda")
+        ).xpu()
+        x = torch.zeros(2, 100, device="xpu")
 
         # For submodules with different precisions, right now current design
         # does not support the case when the root FSDP instance wraps a submodule
@@ -1225,9 +1230,9 @@ class TestFSDPDifferentSubmodulePrecision(FSDPTest):
 
         model = SaveForwardInputsModel(
             forward_inputs=forward_inputs, cast_forward_inputs=False
-        ).cuda()
+        ).xpu()
         c1, c2 = model.c1, model.c2
-        x = torch.zeros(2, 100, device="cuda")
+        x = torch.zeros(2, 100, device="xpu")
 
         model.c2 = FSDP(model.c2, mixed_precision=float16)
         fsdp = FSDP(model, mixed_precision=float32)
@@ -1260,14 +1265,14 @@ class TestFSDPDifferentSubmodulePrecision(FSDPTest):
 
             def forward(self, x: torch.Tensor) -> torch.Tensor:
                 self.forward_inputs["model_input_x"] = x
-                y = torch.ones(2, 100, device="cuda", dtype=torch.float32)
+                y = torch.ones(2, 100, device="xpu", dtype=torch.float32)
                 return self.l2(self.l1(x), y)
 
         forward_inputs: Dict[str, torch.Tensor] = {}
 
         float16 = MixedPrecision(param_dtype=torch.float16)
-        model = ToyModel(forward_inputs).cuda()
-        x = torch.zeros(2, 100, device="cuda", dtype=torch.float32)
+        model = ToyModel(forward_inputs).xpu()
+        x = torch.zeros(2, 100, device="xpu", dtype=torch.float32)
         model.l2 = FSDP(model.l2, mixed_precision=float16)
         fsdp = FSDP(model, mixed_precision=float16)
 
@@ -1322,7 +1327,7 @@ class TestFSDPTrainEval(FSDPTest):
                     return self.module(*args, **kwargs)
                 return self.ema_module(*args, **kwargs)
 
-        device = torch.device("cuda")
+        device = torch.device("xpu")
         model = TransformerWithEMA(device=device)
         policy = ModuleWrapPolicy(
             {nn.Transformer, nn.TransformerEncoderLayer, nn.TransformerDecoderLayer}

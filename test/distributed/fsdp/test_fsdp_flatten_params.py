@@ -3,6 +3,8 @@
 import sys
 
 import torch
+
+
 import torch.nn as nn
 from torch import distributed as dist
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
@@ -40,7 +42,7 @@ class TestFlattenParams(FSDPTest):
 
     def _get_default_config(self):
         return {
-            "device": torch.device("cuda"),
+            "device": torch.device("xpu"),
             "sharding_strategy": HandleShardingStrategy.FULL_SHARD,
             "offload_params": False,
             "mp_param_dtype": None,

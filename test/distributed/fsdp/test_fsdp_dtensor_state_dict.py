@@ -4,6 +4,8 @@ import io
 from copy import deepcopy
 
 import torch
+
+
 import torch.nn as nn
 from torch.distributed._shard.sharded_tensor import ShardedTensor
 from torch.distributed._tensor import DTensor, Shard
@@ -41,7 +43,7 @@ class TestDummyModel(torch.nn.Module):
         return self.net4(self.net3(self.net2(self.net1(x))))
 
     def get_input(self):
-        return torch.rand(8, 8, device="cuda")
+        return torch.rand(8, 8, device="xpu")
 
 
 class TestDummyModelUneven(torch.nn.Module):
@@ -57,7 +59,7 @@ class TestDummyModelUneven(torch.nn.Module):
         return self.net4(self.net3(self.net2(self.net1(x))))
 
     def get_input(self):
-        return torch.rand(5, 5, device="cuda")
+        return torch.rand(5, 5, device="xpu")
 
 
 class TestFSDPWithDeviceMeshAndDTensor(DTensorTestBase):
@@ -66,7 +68,7 @@ class TestFSDPWithDeviceMeshAndDTensor(DTensorTestBase):
             TestDummyModel() if is_even_sharded_model else TestDummyModelUneven()
         )
 
-        model = FSDP(dummy_model.cuda(), device_mesh=device_mesh)
+        model = FSDP(dummy_model.xpu(), device_mesh=device_mesh)
         optim = torch.optim.Adam(model.parameters(), lr=0.1)
         model(model.get_input()).sum().backward()
         optim.step()

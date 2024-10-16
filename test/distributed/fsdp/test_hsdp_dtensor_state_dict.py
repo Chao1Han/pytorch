@@ -4,6 +4,8 @@ import io
 from copy import deepcopy
 
 import torch
+
+
 import torch.distributed as dist
 import torch.nn as nn
 from torch.distributed._shard.sharded_tensor import ShardedTensor
@@ -43,7 +45,7 @@ class DenseModel(torch.nn.Module):
         return self.net4(self.net3(self.net2(self.net1(x))))
 
     def get_input(self):
-        return torch.rand(4, 8, device="cuda")
+        return torch.rand(4, 8, device="xpu")
 
 
 # TODO: Consolidate DeviceMesh based FSDP and HSDP test cases.
@@ -51,7 +53,7 @@ class TestHSDPWithDeviceMeshAndDTensor(DTensorTestBase):
     def _create_model(self, device_mesh=None):
         if device_mesh:
             model = FSDP(
-                DenseModel().cuda(),
+                DenseModel().xpu(),
                 device_mesh=device_mesh,
                 sharding_strategy=ShardingStrategy.HYBRID_SHARD,
             )
@@ -60,7 +62,7 @@ class TestHSDPWithDeviceMeshAndDTensor(DTensorTestBase):
             intra_node_pg = mesh_2d.get_group(mesh_dim=1)
             inter_node_pg = mesh_2d.get_group(mesh_dim=0)
             model = FSDP(
-                DenseModel().cuda(),
+                DenseModel().xpu(),
                 process_group=(intra_node_pg, inter_node_pg),
                 sharding_strategy=ShardingStrategy.HYBRID_SHARD,
             )
@@ -273,7 +275,7 @@ class TestHSDPWithDeviceMeshAndDTensor(DTensorTestBase):
                 super().__init__()
                 torch.manual_seed(0)
                 self.dense = FSDP(
-                    DenseModel().cuda(),
+                    DenseModel().xpu(),
                     use_orig_params=True,
                     sharding_strategy=ShardingStrategy.HYBRID_SHARD,
                     device_mesh=device_mesh,
@@ -292,10 +294,10 @@ class TestHSDPWithDeviceMeshAndDTensor(DTensorTestBase):
                 return self.dense(sparse)
 
         mesh_2d = init_device_mesh(self.device_type, (2, self.world_size // 2))
-        model = FakeMPModel(device_mesh=mesh_2d).cuda()
+        model = FakeMPModel(device_mesh=mesh_2d).xpu()
         optim = torch.optim.Adam(model.parameters(), lr=1e-2)
 
-        batch = torch.rand(5, 8, device=torch.device("cuda"))
+        batch = torch.rand(5, 8, device=torch.device("xpu"))
         model(batch).sum().backward()
         optim.step()
         osd = optim.state_dict()

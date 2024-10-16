@@ -848,7 +848,7 @@ class DistributedDataParallel(Module, Joinable):
             _setup_mixed_precision_params(self.mixed_precision, self.module)
             _cast_buffers(self.mixed_precision, self.module)
             # Stream used for async low precision copies.
-            self._mp_stream = torch.cuda.Stream()
+            self._mp_stream = torch.xpu.Stream() if torch.xpu.is_available() else torch.cuda.Stream()
             self._submodule_to_event = defaultdict(deque)  # type: ignore[var-annotated]
             # Add forward pre-hook to root module to kick off copies to lower
             # precision.
@@ -874,7 +874,7 @@ class DistributedDataParallel(Module, Joinable):
 
             upcast_hook_state = _AllreduceUpcastHookState(
                 ddp_weakref=weakref.ref(self),
-                upcast_stream=torch.cuda.Stream(),
+                upcast_stream=torch.xpu.Stream() if torch.xpu.is_available() else torch.cuda.Stream(),
             )
             self.register_comm_hook(
                 upcast_hook_state,
@@ -1066,8 +1066,8 @@ class DistributedDataParallel(Module, Joinable):
         # Clear out previous iteration submodule to event. This is because we
         # may have populated some events for modules that didn't end up being
         # used.
-        self._submodule_to_event = defaultdict(deque)  # type: ignore[var-annotated]
-        with torch.cuda.stream(self._mp_stream):
+        self._submodule_to_event = defaultdict(deque)  # type: ignore[var-annotated]  
+        with torch.xpu.stream(self._mp_stream) if torch.xpu.is_available() else torch.cuda.stream(self._mp_stream):
             for submodule in self.module.modules():
                 for param in submodule.parameters(recurse=False):
                     # Do not cast DDP ignored parameters.
@@ -1091,7 +1091,7 @@ class DistributedDataParallel(Module, Joinable):
                                 self.mixed_precision.param_dtype  # type: ignore[union-attr]
                             )
                     param.data = param._mp_param
-                copy_event = torch.cuda.Event()
+                copy_event = torch.xpu.Event() if torch.xpu.is_available() else torch.cuda.Event()
                 copy_event.record()
                 self._submodule_to_event[submodule].append(copy_event)
 
@@ -1108,7 +1108,7 @@ class DistributedDataParallel(Module, Joinable):
             # copy event has already been waited on
             return
 
-        event.wait(stream=torch.cuda.current_stream())
+        event.wait(stream=torch.xpu.current_stream() if torch.xpu.is_available() else torch.cuda.current_stream())
         for p in module.parameters(recurse=False):
             # Don't register hooks if param does not require grad
             if not p.requires_grad or (hasattr(p, "_ddp_ignored") and p._ddp_ignored):
@@ -2241,7 +2241,7 @@ class DistributedDataParallel(Module, Joinable):
             or not dist.is_available()
             or not dist.is_nccl_available()
             or torch.cuda.nccl.version() < (2, 10)
-        ):
+        ) and not (torch.xpu.is_available() and dist.is_ccl_available()):
             self._log_and_throw(
                 TypeError,
                 "BF16 all reduce communication hook required CUDA 11+ and NCCL 2.10+.",

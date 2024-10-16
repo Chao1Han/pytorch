@@ -3,6 +3,8 @@
 import os
 
 import torch
+
+
 import torch.distributed._functional_collectives as funcol
 from torch.distributed._tensor import DTensor
 from torch.distributed.device_mesh import _mesh_resources, DeviceMesh, init_device_mesh
@@ -38,6 +40,11 @@ def _get_device_type(world_size):
         and is_nccl_available()
     ):
         device_type = "cuda"
+    elif (
+        torch.xpu.is_available()
+        and torch.xpu.device_count() >= world_size
+    ):
+        device_type = "xpu"
     else:
         device_type = "cpu"
     return device_type
@@ -60,7 +67,7 @@ class DeviceMeshTestGlooBackend(DTensorTestBase):
         mesh = init_device_mesh(self.device_type, (self.world_size,))
         mesh_group = mesh.get_group()
         default_group = _get_default_group()
-        if torch.cuda.is_available():
+        if torch.cuda.is_available() or torch.xpu.is_available():
             self.assertNotEqual(mesh_group, default_group)
             self.assertEqual(get_world_size(mesh_group), get_world_size(default_group))
         else:
@@ -179,7 +186,13 @@ class DeviceMeshTest(DTensorTestBase):
     def test_fake_pg_device_mesh(self):
         fake_store = FakeStore()
         init_process_group("fake", store=fake_store, rank=0, world_size=self.world_size)
-        device_type = "cuda" if torch.cuda.is_available() else "cpu"
+        if torch.xpu.is_available():
+            device_type = "xpu"
+        elif torch.cuda.is_available():
+            device_type = "cuda"
+        else:
+            device_type = "cpu"
+        print(f"device_type is {device_type}")
         mesh = DeviceMesh(device_type, torch.arange(self.world_size))
 
         local_tensor = torch.randn(2, 8)
@@ -208,8 +221,9 @@ class DeviceMeshTest(DTensorTestBase):
         assert global_pg_size == 4, "Test assumes global world size of 4"
         invalid_mesh = [[0, 1], [2, 3]]  # 2D mesh when we need 1D
         regex = r"Invalid mesh \[\[0, 1\], \[2, 3\]\] for ProcessGroup with ranks \[0, 1, 2, 3\]"
+        device = "xpu" if torch.xpu.is_available() else "cuda"
         with self.assertRaisesRegex(ValueError, regex):
-            DeviceMesh.from_group(global_pg, "cuda", invalid_mesh)
+            DeviceMesh.from_group(global_pg, device, invalid_mesh)
 
         device_mesh = init_device_mesh(self.device_type, (2, 2))
         groups = device_mesh.get_all_groups()
@@ -225,13 +239,19 @@ class DeviceMeshTest(DTensorTestBase):
         ):
             # test init_device_mesh with an invalid device type that contains a GPU index
             mesh_shape = (2, self.world_size // 2)
+            device = "xpu:0" if torch.xpu.is_available() else "cuda:0"
             mesh_2d = init_device_mesh(
-                "cuda:0", mesh_shape=mesh_shape, mesh_dim_names=("dp", "tp")
+                device, mesh_shape=mesh_shape, mesh_dim_names=("dp", "tp")
             )
 
     @with_comms
     def test_set_mesh_dim_group_options(self):
-        device_type = "cuda" if torch.cuda.is_available() else "cpu"
+        if torch.xpu.is_available():
+            device_type = "xpu"
+        elif torch.cuda.is_available():
+            device_type = "cuda"
+        else:
+            device_type = "cpu"
         _mesh_resources._set_mesh_dim_group_options(1, "fake", None)
 
         mesh_tensor = torch.arange(4).reshape(2, 2)

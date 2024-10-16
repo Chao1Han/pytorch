@@ -31,6 +31,7 @@ from torch.nn.parallel import DistributedDataParallel
 from torch.testing._internal.common_distributed import (
     MultiProcessTestCase,
     skip_if_lt_x_gpu,
+    requires_cuda,
 )
 from torch.testing._internal.common_utils import (
     instantiate_parametrized_tests,
@@ -66,11 +67,7 @@ def gpus_for_rank(world_size):
     On a single node, all visible GPUs are evenly
     divided to subsets, each process only uses a subset.
     """
-    device_count = (
-        torch.xpu.device_count()
-        if torch.xpu.is_available()
-        else torch.cuda.device_count()
-    )
+    device_count = torch.xpu.device_count() if torch.xpu.is_available() else torch.cuda.device_count()
     visible_devices = list(range(device_count))
     gpus_per_process = device_count // world_size
     gpus_for_rank = []
@@ -344,7 +341,8 @@ class CommonDistributedDataParallelTest:
         gradient_as_bucket_view=False,
     ):
         model = Net()
-        device = devices[0] if devices else torch.device("cuda:%d" % self.rank)
+        device_name = "xpu:%d" % self.rank if torch.xpu.is_available() else "cuda:%d" % self.rank
+        device = devices[0] if devices else torch.device(device_name)
         ddp_model = DistributedDataParallel(
             copy.deepcopy(model).to(device),
             device_ids=device_ids,
@@ -385,7 +383,7 @@ class CommonDistributedDataParallelTest:
             gradient_as_bucket_view=gradient_as_bucket_view,
         )
 
-        input = torch.randn(global_batch_size, 2).cuda(devices[0])
+        input = torch.randn(global_batch_size, 2).xpu(devices[0]) if torch.xpu.is_available() else torch.randn(global_batch_size, 2).cuda(devices[0])
         target = torch.randn(global_batch_size, 4)
 
         return model, ddp_model, input, target
@@ -545,6 +543,7 @@ class CommonDistributedDataParallelTest:
         ddp_target = target[offset : offset + ddp_bs]
         return input, ddp_input, target, ddp_target
 
+    @requires_cuda()
     @skip_if_lt_x_gpu(2)
     @parametrize("use_reentrant", [True, False])
     def test_ddp_checkpointing_once(self, use_reentrant):
@@ -570,6 +569,7 @@ class CommonDistributedDataParallelTest:
                     find_unused_parameters=True,
                 )
 
+    @requires_cuda()
     @skip_if_lt_x_gpu(2)
     @parametrize("use_reentrant", [True, False])
     def test_ddp_checkpointing_unused_params(self, use_reentrant):
@@ -603,6 +603,7 @@ class CommonDistributedDataParallelTest:
                 static_graph=True,
             )
 
+    @requires_cuda()
     @skip_if_lt_x_gpu(2)
     @parametrize("use_reentrant", [True, False])
     def test_ddp_checkpointing_twice(self, use_reentrant):
@@ -636,6 +637,7 @@ class CommonDistributedDataParallelTest:
                     find_unused_parameters=True,
                 )
 
+    @requires_cuda()
     @skip_if_lt_x_gpu(2)
     @parametrize("use_reentrant", [True, False])
     def test_ddp_checkpointing_twice_static_graph(self, use_reentrant):
@@ -653,6 +655,7 @@ class CommonDistributedDataParallelTest:
                 static_graph=True,
             )
 
+    @requires_cuda()
     @skip_if_lt_x_gpu(2)
     def test_ddp_checkpointing_dynamic_module(self):
         """
@@ -672,6 +675,7 @@ class CommonDistributedDataParallelTest:
                 allow_none_grads=True,
             )
 
+    @requires_cuda()
     @skip_if_lt_x_gpu(2)
     def test_ddp_checkpointing_dynamic_weight_sharing(self):
         """
@@ -692,6 +696,7 @@ class CommonDistributedDataParallelTest:
             )
 
     # DDP works as expected if there is weight sharing among layers
+    @requires_cuda()
     @skip_if_lt_x_gpu(2)
     @parametrize("use_reentrant", [True, False])
     def test_ddp_checkpointing_weight_sharing(self, use_reentrant):
@@ -715,6 +720,7 @@ class CommonDistributedDataParallelTest:
                 use_reentrant=use_reentrant,
             )
 
+    @requires_cuda()
     @skip_if_lt_x_gpu(2)
     def test_ddp_checkpointing_twice_weight_sharing(self):
         """
@@ -893,6 +899,7 @@ class CommonDistributedDataParallelTest:
         for p in model.parameters():
             self.assertFalse(p.grad.isnan().any().item())
 
+    @requires_cuda()
     @skip_if_lt_x_gpu(2)
     def test_sync_batch_norm_only_empty_input(self):
         pg = self._get_process_group()
@@ -940,6 +947,7 @@ class CommonDistributedDataParallelTest:
         x.requires_grad = False
         self._test_not_nan(model, x)
 
+    @requires_cuda()
     @skip_if_lt_x_gpu(2)
     def test_sync_batch_norm_empty_input(self):
         pg = self._get_process_group()
@@ -1034,10 +1042,12 @@ class CommonDistributedDataParallelTest:
             else:
                 self.assertEqual(p1.grad, p2.grad)
 
+    @requires_cuda()
     @skip_if_lt_x_gpu(2)
     def test_dataclass_output(self):
         self._test_dataclass_output(skip_o1=False)
 
+    @requires_cuda()
     @skip_if_lt_x_gpu(2)
     def test_dataclass_output_unused_param(self):
         self._test_dataclass_output(skip_o1=True)
@@ -1865,7 +1875,12 @@ class ProcessGroupWithDispatchedCollectivesTests(MultiProcessTestCase):
         # correctly dispatched
 
         # TODO: this will be updated in the future to not be backend specific
-        device = "cuda" if backend == "nccl" else "cpu"
+        if backend == "xccl":
+            device = "xpu"
+        elif backend == "nccl":
+            backend = "cuda"
+        else:
+            device = "cpu"
         # ensure supported devices (cpu, cuda) succeeds during dispatch call
         tensor = torch.zeros(2, 2, device=torch.device(device))
         # multi tensor collectives
@@ -1917,7 +1932,12 @@ class ProcessGroupWithDispatchedCollectivesTests(MultiProcessTestCase):
             store=store,
         )
         # TODO: this will be updated in the future to not be backend specific
-        device = "cuda" if backend == "nccl" else "cpu"
+        if backend == "xccl":
+            device = "xpu"
+        elif backend == "nccl":
+            backend = "cuda"
+        else:
+            device = "cpu"
         tensors = [torch.ones(10, 10, device=torch.device(device))]
         dist.all_reduce_coalesced(tensors, dist.ReduceOp.SUM)
         for tensor in tensors:
@@ -1931,7 +1951,12 @@ class ProcessGroupWithDispatchedCollectivesTests(MultiProcessTestCase):
             rank=self.rank,
             store=store,
         )
-        device = "cuda" if backend == "nccl" else "cpu"
+        if backend == "xccl":
+            device = "xpu"
+        elif backend == "nccl":
+            backend = "cuda"
+        else:
+            device = "cpu"
         # test alltoall_base
         input_tensor = torch.ones(2, 2, device=torch.device(device))
         output_tensor = torch.zeros(2, 2, device=torch.device(device))

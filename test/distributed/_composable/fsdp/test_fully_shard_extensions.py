@@ -8,6 +8,8 @@ import unittest
 from typing import Any, List, Optional, Tuple, Union
 
 import torch
+
+
 import torch.distributed as dist
 import torch.nn as nn
 from torch.distributed._composable.fsdp import fully_shard, MixedPrecisionPolicy
@@ -109,7 +111,7 @@ class TestFullyShardAllGatherExtensionsMultiProcess(
     def _test_all_gather_extensions_train_parity(self, reshard_after_forward: bool):
         torch.manual_seed(42)
         model = self._init_two_tensor_mlp()
-        ref_model = copy.deepcopy(model).cuda()
+        ref_model = copy.deepcopy(model).xpu()
         ref_optim = torch.optim.Adam(ref_model.parameters(), lr=1e-2, foreach=True)
         fully_shard_fn = functools.partial(
             fully_shard, reshard_after_forward=reshard_after_forward
@@ -121,7 +123,7 @@ class TestFullyShardAllGatherExtensionsMultiProcess(
         check_sharded_parity(self, ref_model, model)
 
         torch.manual_seed(42 + self.rank + 1)
-        inp = torch.randn((2, 8), device="cuda")
+        inp = torch.randn((2, 8), device="xpu")
         for iter_idx in range(10):
             losses: List[torch.Tensor] = []
             for _model in (ref_model, model):
@@ -144,9 +146,8 @@ class TestFullyShardAllGatherExtensionsMultiThread(
 ):
     @property
     def device(self) -> torch.device:
-        return torch.device("cuda:0")
+        return torch.device("xpu:0")
 
-    @unittest.skipIf(not TEST_CUDA, "no cuda")
     def test_all_gather_extensions_end_to_end(self):
         with self._patch_two_tensor_fsdp_all_gather():
             self.run_subtests(
@@ -175,13 +176,12 @@ class TestFullyShardAllGatherExtensionsMultiThread(
 
         # Run a few iterations to check for errors
         torch.manual_seed(42 + self.rank + 1)
-        inp = torch.randn((2, 8), device="cuda")
+        inp = torch.randn((2, 8), device="xpu")
         for _ in range(3):
             model(inp).sum().backward()
             optim.step()
             optim.zero_grad()
 
-    @unittest.skipIf(not TEST_CUDA, "no cuda")
     def test_all_gather_extensions_monkey_patch(self):
         # Define a pre/post-all-gather pair that quantizes to bf16 for the
         # all-gather and de-quantizes back to the parameter dtype
@@ -226,7 +226,7 @@ class TestFullyShardAllGatherExtensionsMultiThread(
 
         # Run a few iterations to check for errors
         torch.manual_seed(42 + self.rank + 1)
-        inp = torch.randn((2, 8), device="cuda")
+        inp = torch.randn((2, 8), device="xpu")
         for _ in range(3):
             model(inp).sum().backward()
             optim.step()

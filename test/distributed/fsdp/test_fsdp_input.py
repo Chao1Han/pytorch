@@ -3,6 +3,8 @@
 import sys
 
 import torch
+
+
 from torch import distributed as dist
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.nn import Linear, Module
@@ -53,11 +55,11 @@ class TestInput(FSDPTest):
                     input = input["in"]
                 return self.layer(input)
 
-        model = FSDP(Model()).cuda()
+        model = FSDP(Model()).xpu()
         optim = SGD(model.parameters(), lr=0.1)
 
         for _ in range(5):
-            in_data = torch.rand(64, 4).cuda()
+            in_data = torch.rand(64, 4).xpu()
             in_data.requires_grad = True
             if input_cls is list:
                 in_data = [in_data]

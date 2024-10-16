@@ -3,6 +3,8 @@
 import sys
 
 import torch
+
+
 from torch import distributed as dist
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.nn import Linear, Module, Sequential
@@ -42,21 +44,21 @@ class TestMultipleWrapping(FSDPTest):
         contains nested FSDP wrappers within the module.
         """
         inner_model = InnerModel()
-        model = FSDP(inner_model).cuda()
+        model = FSDP(inner_model).xpu()
         optim = SGD(model.parameters(), lr=0.1)
 
         for i in range(3):
-            input = torch.rand((1, 5), dtype=torch.float).cuda()
+            input = torch.rand((1, 5), dtype=torch.float).xpu()
             input.requires_grad = True
             output = model(input)
             output.sum().backward()
             optim.step()
             optim.zero_grad()
-        input = torch.rand((1, 5), dtype=torch.float).cuda()
+        input = torch.rand((1, 5), dtype=torch.float).xpu()
         output = model(input)
 
         # second time to rewrap the inner model
-        rewrapped_model = FSDP(inner_model).cuda()
+        rewrapped_model = FSDP(inner_model).xpu()
         rewrapped_output = rewrapped_model(input)
 
         self.assertEqual(output, rewrapped_output)

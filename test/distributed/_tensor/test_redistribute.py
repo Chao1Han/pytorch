@@ -4,6 +4,8 @@
 import itertools
 
 import torch
+
+
 from torch.distributed._tensor import DeviceMesh, distribute_tensor, DTensor
 from torch.distributed._tensor.placement_types import Partial, Replicate, Shard
 from torch.distributed.device_mesh import init_device_mesh
@@ -366,7 +368,7 @@ class RedistributeTest(DTensorTestBase):
                 local_out_dt = out_dt.to_local()
                 local_expected_dt = expected_dt.to_local()
                 self.assertEqual(out_dt.to_local(), expected_dt.to_local())
-                if self.device_type == "cuda":
+                if self.device_type == "xpu":
                     self.assertEqual(
                         comm_mode.get_comm_counts()[
                             torch.ops._dtensor.shard_dim_alltoall

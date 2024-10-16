@@ -68,11 +68,12 @@ lib = torch.library.Library("fsdp", "FRAGMENT")  # noqa: TOR901
 lib.define("copy_(Tensor(a!) tensor, Tensor data) -> ()")
 
 
-@torch.library.impl(lib, "copy_", "Meta")
-@torch.library.impl(lib, "copy_", "CUDA")
-@torch.library.impl(lib, "copy_", "CPU")
-def copy_(tensor, data):
-    tensor.copy_(data)
+@torch.library.impl(lib, "set_", "Meta")
+@torch.library.impl(lib, "set_", "CUDA")
+@torch.library.impl(lib, "set_", "XPU")
+@torch.library.impl(lib, "set_", "CPU")
+def set_(tensor, data):
+    tensor.set_(data)
 
 
 """
@@ -231,7 +232,7 @@ class FSDPParam:
         self.pin_memory = (
             self.offload_to_cpu and cast(CPUOffloadPolicy, offload_policy).pin_memory
         )
-        self.grad_offload_event: Optional[torch.cuda.Event] = None
+        self.grad_offload_event: Optional[torch.xpu.Event] = None
         self._init_sharded_param(param, device)
         if self.post_forward_mesh_info:
             self._init_sharded_post_forward_param_metadata(param)
