@@ -11,7 +11,6 @@ from torch.distributed.fsdp._common_utils import _named_parameters_with_duplicat
 from torch.profiler import record_function
 from torch.utils._pytree import tree_flatten, tree_unflatten
 from torch.utils.hooks import RemovableHandle
-from torch._utils import _get_device_module
 
 from ._fsdp_api import CPUOffloadPolicy, MixedPrecisionPolicy, OffloadPolicy
 from ._fsdp_collectives import (
@@ -45,7 +44,7 @@ class FSDPCommContext:
     """This has the communication state shared across FSDP states/parameter groups."""
 
     def lazy_init(self):
-        if not torch.cuda.is_available() and not torch.xpu.is_available():
+        if not (torch.cuda.is_available() and torch.xpu.is_available()):
             raise RuntimeError("FSDP requires CUDA/XPU for streams")
         # Setting the all-gather/reduce-scatter streams to be higher priority
         # can help avoid some issues where their copies in/out are delayed and
@@ -54,17 +53,17 @@ class FSDPCommContext:
         # All-gather state and copy-in stream allow overlapping the next
         # copy-in with the current all-gather in forward; copy-in overlaps with
         # reduce-scatter in backward without the separate copy-in stream
-        self.all_gather_copy_in_stream = torch.Stream(priority=high_priority)
+        self.all_gather_copy_in_stream = torch.xpu.Stream(priority=high_priority)
         # All-gather stream allows overlapping next all-gather with current
         # forward compute
-        self.all_gather_stream = torch.Stream(priority=high_priority)
+        self.all_gather_stream = torch.xpu.Stream(priority=high_priority)
         # Reduce-scatter stream gives separate execution "thread" for post-
         # backward logic like pre/post-gradient division and reduce-scatter
-        self.reduce_scatter_stream = torch.Stream(priority=high_priority)
+        self.reduce_scatter_stream = torch.xpu.Stream(priority=high_priority)
         # Run the HSDP all-reduces concurrently with all-gather/reduce-scatter
         # since collectives use different network resources and can overlap
         # in the typical intra-node sharding / inter-node replication case
-        self.all_reduce_stream = torch.Stream()
+        self.all_reduce_stream = torch.xpu.Stream()
         # All-gather/reduce-scatter states keep references to collective
         # tensors produced in one stream and used in another and accompanying
         # CUDA events for synchronization
@@ -74,33 +73,24 @@ class FSDPCommContext:
         self.post_forward_order: List[FSDPParamGroup] = []  # will cause ref cycles
 
     def get_all_gather_streams(
-<<<<<<< HEAD
-        self, async_op: bool, training_state: TrainingState
-    ) -> Tuple[torch.cuda.Stream, torch.cuda.Stream]:
-        if not async_op and training_state in (
-            TrainingState.FORWARD,
-            TrainingState.PRE_BACKWARD,
-        ):
-=======
         self, training_state: TrainingState
-    ) -> Tuple[torch.Stream, torch.Stream]:
+    ) -> Tuple[torch.xpu.Stream, torch.xpu.Stream]:
         if training_state in (TrainingState.FORWARD, TrainingState.PRE_BACKWARD):
->>>>>>> 57ee036448d (enable distributed frontend)
             # Use separate streams for implicit prefetching
             return self.all_gather_copy_in_stream, self.all_gather_stream
-        current_stream = _get_device_module().current_stream()
+        current_stream = torch.xpu.current_stream()
         return current_stream, current_stream
 
 
 # See [Note: Overlapping all-gather copy-in and all-gather]
 class AllGatherState(NamedTuple):
     all_gather_result: AllGatherResult
-    event: torch.Event  # all-gather copy-out
+    event: torch.xpu.Event  # all-gather copy-out
 
 
 class ReduceScatterState(NamedTuple):
     reduce_scatter_input: torch.Tensor
-    event: torch.Event  # reduce-scatter event
+    event: torch.xpu.Event  # reduce-scatter event
 
 
 class FSDPParamGroup:
@@ -177,10 +167,10 @@ class FSDPParamGroup:
         # Holds the reduce-scatter/all-reduce view-out CUDA event that marks the end of
         # the group's post-backward (e.g. reduce-scatter, all-reduce and div), which
         # should be waited on at the end of backward
-        self._post_reduce_event: Optional[torch.Event] = None
+        self._post_reduce_event: Optional[torch.xpu.Event] = None
         # Holds the reshard-after-forward CUDA event when resharding to a
         # different world size, which should be waited on in the next unshard
-        self._reshard_after_forward_event: Optional[torch.Event] = None
+        self._reshard_after_forward_event: Optional[torch.xpu.Event] = None
 
         # Only for HSDP, if accumulating gradients without all-reduce, save the
         # partial reduce output (only reduce-scattered but not all-reduced)
@@ -268,7 +258,7 @@ class FSDPParamGroup:
         for fsdp_param in self.fsdp_params:
             fsdp_param.init_unsharded_param()
         self._to_unsharded()
-        all_gather_copy_out_event = torch.Event()
+        all_gather_copy_out_event = torch.xpu.Event()
         all_gather_copy_out_event.record()
         if not async_op and self._training_state == TrainingState.FORWARD:
             # Defer free to allow for overlap of this copy-out with next
@@ -280,7 +270,7 @@ class FSDPParamGroup:
             self._wait_all_gather_streams_on_event(all_gather_copy_out_event)
         self._all_gather_result = None  # free unless saved in `all_gather_state`
 
-    def _wait_all_gather_streams_on_event(self, event: torch.Event):
+    def _wait_all_gather_streams_on_event(self, event: torch.xpu.Event):
         # Calling `unshard` before lazy init means streams are not initialized
         if hasattr(self.comm_ctx, "all_gather_copy_in_stream"):
             self.comm_ctx.all_gather_copy_in_stream.wait_event(event)
@@ -293,7 +283,7 @@ class FSDPParamGroup:
                 return
             if self._use_post_forward_mesh:
                 self._to_sharded_post_forward()
-                self._reshard_after_forward_event = torch.Event()
+                self._reshard_after_forward_event = torch.xpu.Event()
                 self._reshard_after_forward_event.record()
                 return
         self._to_sharded()
@@ -373,7 +363,7 @@ class FSDPParamGroup:
             return
         with record_function(self._with_fqn("FSDP::post_backward_reduce")):
             if self.comm_ctx.reduce_scatter_state is not None:
-                _get_device_module().current_stream().wait_event(
+                torch.xpu.current_stream().wait_event(
                     self.comm_ctx.reduce_scatter_state.event
                 )
                 self.comm_ctx.reduce_scatter_state = None
@@ -402,7 +392,7 @@ class FSDPParamGroup:
 
     def finalize_backward(self):
         if self._post_reduce_event is not None:
-            _get_device_module().current_stream().wait_event(self._post_reduce_event)
+            torch.xpu.current_stream().wait_event(self._post_reduce_event)
             self._post_reduce_event = None
         for fsdp_param in self.fsdp_params:
             if fsdp_param.grad_offload_event is not None:
