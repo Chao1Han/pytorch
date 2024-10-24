@@ -4,8 +4,8 @@ import copy
 import unittest
 
 import torch
-import intel_extension_for_pytorch
-import oneccl_bindings_for_pytorch
+
+
 import torch.nn as nn
 from torch.distributed._composable.fsdp import FSDPModule, fully_shard
 from torch.testing._internal.common_cuda import TEST_CUDA

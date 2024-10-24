@@ -3,8 +3,8 @@ from collections import OrderedDict
 from copy import deepcopy
 
 import torch
-import intel_extension_for_pytorch
-import oneccl_bindings_for_pytorch
+
+
 from torch.distributed._tensor import DeviceMesh, DTensor, Replicate, Shard
 from torch.distributed.tensor.parallel.api import parallelize_module
 from torch.distributed.tensor.parallel.style import (

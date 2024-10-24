@@ -8,8 +8,8 @@ import unittest
 from typing import Any, List, Optional, Tuple, Union
 
 import torch
-import intel_extension_for_pytorch
-import oneccl_bindings_for_pytorch
+
+
 import torch.distributed as dist
 import torch.nn as nn
 from torch.distributed._composable.fsdp import fully_shard, MixedPrecisionPolicy

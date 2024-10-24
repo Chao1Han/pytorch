@@ -3,8 +3,8 @@
 import itertools
 
 import torch
-import intel_extension_for_pytorch
-import oneccl_bindings_for_pytorch
+
+
 from torch.distributed._tensor import distribute_tensor, DTensor, Replicate, Shard
 from torch.distributed._tensor.experimental import register_sharding
 from torch.distributed._tensor.placement_types import DTensorSpec

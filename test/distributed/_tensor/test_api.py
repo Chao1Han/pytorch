@@ -2,8 +2,8 @@
 # Owner(s): ["oncall: distributed"]
 
 import torch
-import intel_extension_for_pytorch
-import oneccl_bindings_for_pytorch
+
+
 import torch.nn as nn
 from torch.distributed._tensor import (
     DeviceMesh,

@@ -1,8 +1,8 @@
 # Owner(s): ["oncall: distributed"]
 
 import torch
-import intel_extension_for_pytorch
-import oneccl_bindings_for_pytorch
+
+
 from torch.distributed.fsdp._trace_utils import _ExecOrderTracer
 from torch.testing._internal.common_utils import (
     instantiate_parametrized_tests,

@@ -5,8 +5,8 @@ import sys
 from typing import Union
 
 import torch
-import intel_extension_for_pytorch
-import oneccl_bindings_for_pytorch
+
+
 import torch.nn as nn
 from torch import distributed as dist
 from torch.distributed.fsdp import ShardingStrategy

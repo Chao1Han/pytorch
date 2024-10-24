@@ -3,8 +3,8 @@
 import itertools
 
 import torch
-import intel_extension_for_pytorch
-import oneccl_bindings_for_pytorch
+
+
 from torch.distributed._tensor import distribute_tensor, DTensor
 from torch.distributed._tensor._utils import compute_local_shape_and_global_offset
 from torch.distributed.device_mesh import init_device_mesh

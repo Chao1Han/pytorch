@@ -1,7 +1,7 @@
 # Owner(s): ["oncall: distributed"]
 import torch
-import intel_extension_for_pytorch
-import oneccl_bindings_for_pytorch
+
+
 import torch.distributed._functional_collectives as funcol
 import torch.distributed.tensor._random as random
 from torch.distributed._tensor import init_device_mesh, Replicate

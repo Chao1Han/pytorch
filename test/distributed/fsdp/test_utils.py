@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from typing import List
 
 import torch
-import intel_extension_for_pytorch
-import oneccl_bindings_for_pytorch
+
+
 import torch.nn as nn
 from torch import distributed as dist
 from torch.distributed.utils import _apply_to_tensors, _replace_by_prefix

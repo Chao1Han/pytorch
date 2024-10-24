@@ -8,8 +8,8 @@ import unittest
 from typing import List, Optional
 
 import torch
-import intel_extension_for_pytorch
-import oneccl_bindings_for_pytorch
+
+
 from torch import distributed as dist
 from torch.cuda.amp.common import amp_definitely_not_available
 from torch.distributed.fsdp import CPUOffload, MixedPrecision
