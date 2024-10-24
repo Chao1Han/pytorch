@@ -1211,7 +1211,7 @@ class TestFSDPStateDict(FSDPTest):
                 if torch.cuda.is_available():
                     pg = dist.new_group(backend="cpu:gloo,cuda:nccl")
                 else:
-                    pg = dist.new_group(backend="cpu:gloo,xpu:ccl")
+                    pg = dist.new_group(backend="cpu:gloo,xpu:xccl")
                 fsdp_model = TransformerWithSharedParams.init(
                     pg,
                     FSDPInitMode.RECURSIVE,

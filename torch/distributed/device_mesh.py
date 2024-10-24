@@ -508,7 +508,7 @@ else:
                 if torch.cuda.is_available() and get_backend(default_group) == "gloo":
                     dim_group = new_group(backend="cpu:gloo,cuda:nccl", ranks=ranks)
                 elif torch.xpu.is_available() and get_backend(default_group) == "gloo":
-                    dim_group = new_group(backend="cpu:gloo,xpu:ccl", ranks=ranks)
+                    dim_group = new_group(backend="cpu:gloo,xpu:xccl", ranks=ranks)
                 else:
                     dim_group = default_group
                 dim_group_infos.append(

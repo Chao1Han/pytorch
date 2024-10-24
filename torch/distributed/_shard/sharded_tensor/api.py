@@ -373,7 +373,7 @@ class ShardedTensor(ShardedTensorBase):
         """
         if dist.get_backend(self._process_group) == dist.Backend.NCCL:
             return torch.device(torch.cuda.current_device())
-        elif dist.get_backend(self._process_group) == dist.Backend.CCL:
+        elif dist.get_backend(self._process_group) == dist.Backend.XCCL:
             return torch.device(torch.xpu.current_device())
         else:
             print("************* [ERROR] something wrong with cc backend *************", flush=True)

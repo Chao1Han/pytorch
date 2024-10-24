@@ -172,7 +172,7 @@ SEND_RECV_PROFILING_SUPPORTED_BACKENDS = [
     dist.Backend.GLOO,
     dist.Backend.NCCL,
     dist.Backend.UCC,
-    dist.Backend.CCL,
+    dist.Backend.XCCL,
 ]
 
 # Dummy NamedTuple data structures to test DDP support for NamedTuple types.
@@ -436,8 +436,8 @@ def require_backend_is_available(backends):
             return dist.is_mpi_available()
         if backend == dist.Backend.UCC:
             return dist.is_ucc_available()
-        if backend == dist.Backend.CCL:
-            return dist.is_ccl_available()
+        if backend == dist.Backend.XCCL:
+            return dist.is_xccl_available()
         if backend in DistTestCases.backend_feature["plugin"]:
             return True
         return False
@@ -8819,7 +8819,7 @@ class DistributedTest:
                 # provide sufficient timeout so communicators
                 # can be initialized in ctor.
                 timeout=timedelta(seconds=15),
-                backend=dist.Backend.CCL,
+                backend=dist.Backend.XCCL,
             )
             gloo_pg = dist.new_group(
                 ranks=list(range(int(self.world_size))),

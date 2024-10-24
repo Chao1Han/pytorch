@@ -37,7 +37,7 @@ if NO_MULTIPROCESSING_SPAWN:
     print("Spawn not available, skipping tests.", file=sys.stderr)
     sys.exit(0)
 
-_allowed_backends = ("gloo", "nccl", "ucc", "ccl")
+_allowed_backends = ("gloo", "nccl", "ucc", "xccl")
 if (
     "BACKEND" not in os.environ
     or "WORLD_SIZE" not in os.environ

@@ -26,7 +26,7 @@ if TEST_WITH_DEV_DBG_ASAN:
     sys.exit(0)
 
 if torch.xpu.is_available():
-    BACKEND = dist.Backend.CCL
+    BACKEND = dist.Backend.XCCL
 elif torch.cuda.is_available():
     BACKEND = dist.Backend.NCCL
 else:
@@ -45,7 +45,7 @@ def with_comms(func=None):
     @wraps(func)
     def wrapper(self, *args, **kwargs):
         if BACKEND == dist.Backend.NCCL and torch.cuda.device_count() < self.world_size \
-            or BACKEND == dist.Backend.CCL and torch.xpu.device_count() < self.world_size:
+            or BACKEND == dist.Backend.XCCL and torch.xpu.device_count() < self.world_size:
             sys.exit(TEST_SKIPS[f"multi-gpu-{self.world_size}"].exit_code)
 
         self.dist_init()
