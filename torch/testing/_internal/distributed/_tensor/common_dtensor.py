@@ -38,7 +38,7 @@ if torch.cuda.is_available() and torch.cuda.device_count() > 1:
     PG_BACKEND = "nccl"
 elif torch.xpu.is_available():
     DEVICE_TYPE = "xpu"
-    PG_BACKEND = "ccl"
+    PG_BACKEND = "xccl"
 else:
     DEVICE_TYPE = "cpu"
     PG_BACKEND = "gloo"
@@ -317,7 +317,7 @@ class DTensorTestBase(MultiProcessTestCase):
         if "nccl" in self.backend and torch.cuda.device_count() < self.world_size:
             sys.exit(TEST_SKIPS[f"multi-gpu-{self.world_size}"].exit_code)
 
-        if self.backend not in ["ccl", "nccl", "gloo", "mpi", "cpu:gloo,cuda:nccl"]:
+        if self.backend not in ["xccl", "nccl", "gloo", "mpi", "cpu:gloo,cuda:nccl"]:
             raise RuntimeError(f"Backend {self.backend} not supported!")
 
         dist.init_process_group(
@@ -330,7 +330,7 @@ class DTensorTestBase(MultiProcessTestCase):
         # set device for nccl pg for collectives
         if "nccl" in self.backend:
             torch.cuda.set_device(self.rank)
-        elif "ccl" in self.backend:
+        elif "xccl" in self.backend:
             torch.xpu.set_device(self.rank)
 
     def destroy_pg(self) -> None:

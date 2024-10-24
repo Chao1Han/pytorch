@@ -1875,7 +1875,7 @@ class ProcessGroupWithDispatchedCollectivesTests(MultiProcessTestCase):
         # correctly dispatched
 
         # TODO: this will be updated in the future to not be backend specific
-        if backend == "ccl":
+        if backend == "xccl":
             device = "xpu"
         elif backend == "nccl":
             backend = "cuda"
@@ -1932,7 +1932,7 @@ class ProcessGroupWithDispatchedCollectivesTests(MultiProcessTestCase):
             store=store,
         )
         # TODO: this will be updated in the future to not be backend specific
-        if backend == "ccl":
+        if backend == "xccl":
             device = "xpu"
         elif backend == "nccl":
             backend = "cuda"
@@ -1951,7 +1951,7 @@ class ProcessGroupWithDispatchedCollectivesTests(MultiProcessTestCase):
             rank=self.rank,
             store=store,
         )
-        if backend == "ccl":
+        if backend == "xccl":
             device = "xpu"
         elif backend == "nccl":
             backend = "cuda"

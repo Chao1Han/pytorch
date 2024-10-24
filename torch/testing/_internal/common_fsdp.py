@@ -1193,7 +1193,7 @@ class FSDPTest(MultiProcessTestCase):
         if torch.cuda.is_available():
             backend = "nccl"
         elif torch.xpu.is_available():
-            backend = "ccl"
+            backend = "xccl"
         else:
             backend = "gloo"
 

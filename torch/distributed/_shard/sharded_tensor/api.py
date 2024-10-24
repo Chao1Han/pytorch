@@ -697,7 +697,7 @@ class ShardedTensor(ShardedTensorBase):
             current_device = self._local_shards[0].tensor.device
         elif self._process_group._get_backend_name() == "gloo":
             current_device = torch.device("cpu")
-        elif self._process_group._get_backend_name() == "ccl":
+        elif self._process_group._get_backend_name() == "xccl":
             current_device = torch.device(torch.xpu.current_device())
         else:
             current_device = torch.device(torch.cuda.current_device())

@@ -556,5 +556,6 @@ def _no_dispatch_record_stream(tensor: torch.Tensor, stream: torch.Stream) -> No
         # TODO(voz): Extend a dynamo util to answer the above, unify the codepaths here.
         tensor.record_stream(stream)
     else:
-        with no_dispatch():
-            tensor.record_stream(stream)
+        pass
+        # with no_dispatch():
+        #     tensor.record_stream(stream)

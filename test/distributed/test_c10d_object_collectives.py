@@ -94,7 +94,7 @@ class TestObjectCollectives(MultiProcessTestCase):
         # set device for nccl pg for collectives
         if BACKEND == "nccl":
             torch.cuda.set_device(self.rank)
-        elif BACKEND == "ccl":
+        elif BACKEND == "xccl":
             torch.xpu.set_device(self.rank)
 
     @with_comms()
