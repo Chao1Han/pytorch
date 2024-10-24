@@ -5,11 +5,7 @@ import torch
 import torch._dynamo.compiled_autograd as ca
 import torch.distributed as dist
 from torch.distributed.distributed_c10d import ReduceOp
-<<<<<<< HEAD
-from torch.distributed.tensor import DTensor
-=======
 from torch._utils import _get_device_module
->>>>>>> f9852e703bc (refine)
 
 from ._fsdp_common import (
     _get_dim0_padded_size,
