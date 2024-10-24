@@ -85,7 +85,6 @@ __all__ = [
     "is_mpi_available",
     "is_backend_available",
     "is_nccl_available",
-    "is_ccl_available",
     "is_torchelastic_launched",
     "is_ucc_available",
     "is_xccl_available",
@@ -1109,10 +1108,6 @@ def is_nccl_available() -> bool:
     """Check if the NCCL backend is available."""
     return _NCCL_AVAILABLE
 
-def is_ccl_available() -> bool:
-    """Check if the NCCL backend is available."""
-    return _CCL_AVAILABLE
-
 def is_gloo_available() -> bool:
     """Check if the Gloo backend is available."""
     return _GLOO_AVAILABLE
@@ -1343,7 +1338,7 @@ def _add_ephemeral_timeout_for_all_pgs(timeout: timedelta) -> None:
                 backend._add_ephemeral_timeout(timeout)
         elif torch.device("xpu") in devices:
             backend = pg._get_backend(torch.device("xpu"))
-            if is_ccl_available():
+            if is_xccl_available():
                 backend._add_ephemeral_timeout(timeout)
 
 
