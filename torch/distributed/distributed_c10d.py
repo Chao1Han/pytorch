@@ -819,11 +819,6 @@ def _get_pg_default_device(group: Optional[ProcessGroup] = None) -> torch.device
         # collective has been run?) We pick cpu as the default and hopefully
         # this would lazily init Gloo or other available cpu backend.
         _world.pg_default_device[group] = torch.device("cpu")
-    elif torch.device("xpu") in devices:
-        # There are multiple backends in this PG and cpu is among them.
-        # cpu is preferred as the object is in cpu memory. No need for device
-        # copy.
-        _world.pg_default_device[group] = torch.device("xpu")  #todo ,CCL for both CPU & GPU will fallback to CPU
     elif torch.device("cpu") in devices:
         # There are multiple backends in this PG and cpu is among them.
         # cpu is preferred as the object is in cpu memory. No need for device

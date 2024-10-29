@@ -763,7 +763,6 @@ class ProcessGroupXCCLOpTest(MultiProcContinousTest):
     def test_send_recv(self):
         pg = self.pg
         device = self.rank_to_GPU[self.rank][0]
-
         # Generate the same random tensor
         torch.manual_seed(0)
         send_tensor = torch.rand(10, 10, device=device)
@@ -773,7 +772,6 @@ class ProcessGroupXCCLOpTest(MultiProcContinousTest):
             recv_tensor = torch.rand(10, 10, device=device)
             dist.recv(recv_tensor, 0)
             self.assertEqual(send_tensor, recv_tensor)
-
     @requires_xccl()
     @skip_but_pass_in_sandcastle_if(not TEST_MULTIGPU, "XCCL test requires 2+ GPUs")
     def test_send_recv_complex(self):

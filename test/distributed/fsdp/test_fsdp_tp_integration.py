@@ -356,10 +356,11 @@ class TestTPFSDPIntegration(FSDPTest):
         """
         Tests TP + FSDP extension with correct gradient (i.e. no ACT)
         """
+        print("111")
         mesh_2d = init_device_mesh(
             "xpu", (self.world_size // 2, 2), mesh_dim_names=["dp", "tp"]
         )
-
+        print("2222")
         class TestModel(torch.nn.Module):
             def __init__(self) -> None:
                 super().__init__()
