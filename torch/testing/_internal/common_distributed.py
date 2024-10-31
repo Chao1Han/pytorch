@@ -97,7 +97,7 @@ class DistTestCases:
     backend_feature["cuda"] = {"nccl", "gloo", "ucc"}
     backend_feature["xpu"] = {"xccl"}
     backend_feature["ddp"] = {"nccl", "gloo", "ucc"}
-    backend_feature["subgroup"] = {"nccl", "gloo", "ucc", "xccl"}
+    backend_feature["subgroup"] = {"nccl", "gloo", "ucc"}
     backend_feature["plugin"] = set()
 
 
