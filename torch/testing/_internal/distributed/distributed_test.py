@@ -1751,6 +1751,8 @@ class DistributedTest:
             rank = dist.get_rank()
             send_recv_size = 10
             tensor = _build_tensor(send_recv_size, value=rank)
+            if(dist.distributed_c10d._get_default_group().name() == 'xccl'):
+                tensor = tensor.to(torch.device('xpu:{}'.format(rank)))
             recv_ranks = []
             irecv_ranks = []
 
@@ -1765,7 +1767,8 @@ class DistributedTest:
 
                             for recv in ["recv", "irecv"]:
                                 output_tensor = _build_tensor(send_recv_size, value=-1)
-
+                                if(dist.distributed_c10d._get_default_group().name() == 'xccl'):
+                                    output_tensor = output_tensor.to(torch.device('xpu:{}'.format(rank)))
                                 if recv == "recv":
                                     sender = dist.recv(output_tensor)
                                     recv_ranks.append(sender)
@@ -1823,7 +1826,9 @@ class DistributedTest:
                     [2 * (dist.get_world_size() - 1)] * dist.get_world_size(), frequency
                 )
                 self._barrier()
-
+        @skip_but_pass_in_sandcastle_if(
+            BACKEND == "xccl", "Backend xccl does not support recvAnysource"
+        )
         @skip_but_pass_in_sandcastle_if(
             BACKEND in DistTestCases.skip_collective["sendrecv anysource"],
             f"{BACKEND} does not support send/recv from any source",
@@ -1831,6 +1836,9 @@ class DistributedTest:
         def test_send_recv_any_source(self):
             self._test_send_recv_any_source(profiler_ctx=None)
 
+        @skip_but_pass_in_sandcastle_if(
+            BACKEND == "xccl", "Backend xccl does not support recvAnysource"
+        )
         @skip_but_pass_in_sandcastle_if(
             BACKEND in DistTestCases.skip_collective["sendrecv anysource"],
             f"{BACKEND} does not support send/recv from any source",
@@ -1844,6 +1852,9 @@ class DistributedTest:
             f"{BACKEND} does not support send/recv from any source",
         )
         @skip_but_pass_in_sandcastle_if(IS_FBCODE, "Kineto in fbcode code causes hang")
+        @skip_but_pass_in_sandcastle_if(
+            BACKEND == "xccl", "Backend xccl does not support recvAnysource"
+        )
         @skip_but_pass_in_sandcastle_if(
             IS_MACOS or IS_WINDOWS,
             "torch.profiler not enabled for mac/windows: https://github.com/pytorch/pytorch/pull/56124",
@@ -4105,6 +4116,8 @@ class DistributedTest:
 
             for dest in group:
                 expected_time = torch.DoubleTensor(1).fill_(0.0)
+                if(group_id.name() == "xccl"):
+                    expected_time = expected_time.xpu(rank)
                 if cuda:
                     expected_time = expected_time.xpu(rank_to_GPU[rank][0])
                 if dest == rank:
