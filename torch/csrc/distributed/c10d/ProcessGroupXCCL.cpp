@@ -102,7 +102,7 @@ void check_xpu_single_tensor(
 
 int64_t check_xpu_tensors_same_device(const std::vector<at::Tensor>& tensors) {
   TORCH_CHECK_WITH(
-      ValueError, tensors.size() == 0, "Tensor list must be nonempty");
+      ValueError, tensors.size() != 0, "Tensor list must be nonempty");
 
   const auto& first = tensors.front();
 
@@ -1063,6 +1063,7 @@ c10::intrusive_ptr<Work> ProcessGroupXCCL::_broadcast_oop(
         auto xcclDataType = getXcclDataType(input.scalar_type());
         ccl::broadcast(
             input.data_ptr(),
+            output.data_ptr(),
             (size_t)input.numel(),
             xcclDataType,
             root,

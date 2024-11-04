@@ -65,14 +65,16 @@ class TestObjectCollectives(MultiProcessTestCase):
     @property
     def device(self):
         return (
-            torch.device(self.rank)
+            torch.device("cuda", self.rank % torch.cuda.device_count())
             if BACKEND == dist.Backend.NCCL
             else torch.device("cpu")
         )
 
     @property
     def world_size(self):
-        return WORLD_SIZE
+        if BACKEND == dist.Backend.NCCL:
+            return torch.cuda.device_count()
+        return super().world_size
 
     @property
     def process_group(self):

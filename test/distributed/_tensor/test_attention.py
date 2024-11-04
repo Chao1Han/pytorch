@@ -14,6 +14,7 @@ from torch.distributed._tensor.experimental._attention import (
     _CausalBehavior,
     _cp_options,
     _is_causal_behavior,
+    _RotateMethod,
     context_parallel,
     context_parallel_unshard,
 )
@@ -71,13 +72,16 @@ class RingAttentionTest(DTensorTestBase):
     @parametrize("compiled", [True, False])
     @parametrize("backend", backends)
     @parametrize("load_balance", [True, False])
+    @parametrize("rotater", [_RotateMethod.ALL_TO_ALL, _RotateMethod.ALL_GATHER])
     def test_ring_attention_sdpa(
         self,
         is_causal: bool,
         compiled: bool,
         backend: SDPBackend,
         load_balance: bool,
+        rotater: _RotateMethod,
     ) -> None:
+        _cp_options.rotate_method = rotater
         device_mesh = DeviceMesh(self.device_type, torch.arange(0, self.world_size))
         dtype = torch.bfloat16
         bs = 8
@@ -153,7 +157,7 @@ class RingAttentionTest(DTensorTestBase):
                     cp_out = fn(cp_q, cp_k, cp_v, is_causal=is_causal)
                     cp_out.sum().backward()
 
-                    if not compiled:
+                    if not compiled and rotater == _RotateMethod.ALL_TO_ALL:
                         # Compiler and CommDebugMode do not work well together.
                         self.assertDictEqual(
                             comm_mode.get_comm_counts(),
@@ -230,8 +234,12 @@ class RingAttentionTest(DTensorTestBase):
     @with_comms
     @sdpa_kernel(backends=[SDPBackend.FLASH_ATTENTION])
     @parametrize("is_causal", [True, False])
-    def test_ring_attention_native_transformer(self, is_causal: bool) -> None:
+    @parametrize("rotater", [_RotateMethod.ALL_GATHER, _RotateMethod.ALL_TO_ALL])
+    def test_ring_attention_native_transformer(
+        self, is_causal: bool, rotater: _RotateMethod
+    ) -> None:
         _cp_options.enable_load_balance = is_causal
+        _cp_options.rotate_method = rotater
         device_mesh = DeviceMesh(
             self.device_type,
             torch.arange(0, self.world_size),
@@ -270,22 +278,42 @@ class RingAttentionTest(DTensorTestBase):
 
         with CommDebugMode() as comm_mode:
             out = model(seq, mask=mask, is_causal=is_causal)
-        self.assertDictEqual(
-            comm_mode.get_comm_counts(),
-            {
-                c10d_functional.all_to_all_single: (self.world_size - 1) * num_layers,
-            },
-        )
+
+        if rotater == _RotateMethod.ALL_TO_ALL:
+            self.assertDictEqual(
+                comm_mode.get_comm_counts(),
+                {
+                    c10d_functional.all_to_all_single: (self.world_size - 1)
+                    * num_layers,
+                },
+            )
+        else:
+            self.assertDictEqual(
+                comm_mode.get_comm_counts(),
+                {
+                    c10d_functional.all_gather_into_tensor: num_layers,
+                },
+            )
 
         with CommDebugMode() as comm_mode:
             out.sum().backward()
-        self.assertDictEqual(
-            comm_mode.get_comm_counts(),
-            {
-                c10d_functional.all_to_all_single: (self.world_size * 2 - 1)
-                * num_layers,
-            },
-        )
+
+        if rotater == _RotateMethod.ALL_TO_ALL:
+            self.assertDictEqual(
+                comm_mode.get_comm_counts(),
+                {
+                    c10d_functional.all_to_all_single: (self.world_size * 2 - 1)
+                    * num_layers,
+                },
+            )
+        else:
+            self.assertDictEqual(
+                comm_mode.get_comm_counts(),
+                {
+                    c10d_functional.all_gather_into_tensor: num_layers,
+                    c10d_functional.all_to_all_single: self.world_size * num_layers,
+                },
+            )
 
     @skip_if_lt_x_gpu(2)
     @unittest.skipIf(
@@ -293,7 +321,9 @@ class RingAttentionTest(DTensorTestBase):
     )
     @with_comms
     @sdpa_kernel(backends=[SDPBackend.FLASH_ATTENTION])
-    def test_ring_attention_custom_transformer(self) -> None:
+    @parametrize("rotater", [_RotateMethod.ALL_GATHER, _RotateMethod.ALL_TO_ALL])
+    def test_ring_attention_custom_transformer(self, rotater: _RotateMethod) -> None:
+        _cp_options.rotate_method = rotater
         device_mesh = DeviceMesh(
             self.device_type,
             torch.arange(0, self.world_size),
@@ -319,23 +349,40 @@ class RingAttentionTest(DTensorTestBase):
 
         with CommDebugMode() as comm_mode:
             out = model(seq)
-        self.assertDictEqual(
-            comm_mode.get_comm_counts(),
-            {
-                c10d_functional.all_to_all_single: (self.world_size - 1)
-                * args.n_layers,
-            },
-        )
+
+        if rotater == _RotateMethod.ALL_TO_ALL:
+            self.assertDictEqual(
+                comm_mode.get_comm_counts(),
+                {
+                    c10d_functional.all_to_all_single: (self.world_size - 1)
+                    * args.n_layers,
+                },
+            )
+        else:
+            self.assertDictEqual(
+                comm_mode.get_comm_counts(),
+                {c10d_functional.all_gather_into_tensor: args.n_layers},
+            )
 
         with CommDebugMode() as comm_mode:
             out.sum().backward()
-        self.assertDictEqual(
-            comm_mode.get_comm_counts(),
-            {
-                c10d_functional.all_to_all_single: (self.world_size * 2 - 1)
-                * args.n_layers,
-            },
-        )
+
+        if rotater == _RotateMethod.ALL_TO_ALL:
+            self.assertDictEqual(
+                comm_mode.get_comm_counts(),
+                {
+                    c10d_functional.all_to_all_single: (self.world_size * 2 - 1)
+                    * args.n_layers,
+                },
+            )
+        else:
+            self.assertDictEqual(
+                comm_mode.get_comm_counts(),
+                {
+                    c10d_functional.all_gather_into_tensor: args.n_layers,
+                    c10d_functional.all_to_all_single: self.world_size * args.n_layers,
+                },
+            )
 
 
 if backends:

@@ -24,7 +24,7 @@ from torch.distributed.utils import _p_assert
 from torch.testing._internal.common_distributed import skip_if_lt_x_gpu
 from torch.testing._internal.common_fsdp import (
     AlwaysWrapNestedWrappedModule,
-    CUDAInitMode,
+    DEVICEInitMode,
     DummyDDP,
     FSDPInitMode,
     FSDPTest,
@@ -77,17 +77,17 @@ class TestParityWithDDP(FSDPTest):
     PyTorch DDP vs. FullyShardedDataParallel.
     """
 
-    def _get_cuda_init_modes(self, cpu_offload: CPUOffload) -> List[CUDAInitMode]:
+    def _get_device_init_modes(self, cpu_offload: CPUOffload) -> List[DEVICEInitMode]:
         modes = [
-            CUDAInitMode.CUDA_AFTER,
-            CUDAInitMode.CUDA_BEFORE,
+            DEVICEInitMode.DEVICE_AFTER,
+            DEVICEInitMode.DEVICE_BEFORE,
         ]
-        # Note that CUDAInitMode.CUDA_NEVER works currently only with CPU
+        # Note that DEVICEInitMode.DEVICE_NEVER works currently only with CPU
         # offload as we explicitly bring the param back to CUDA device. In
         # general, it will not work since we try to all_gather p.data which is
         # on CPU but NCCL only supports GPU.
         if cpu_offload.offload_params:
-            modes.append(CUDAInitMode.CUDA_NEVER)
+            modes.append(DEVICEInitMode.DEVICE_NEVER)
 
         return modes
 
@@ -95,7 +95,7 @@ class TestParityWithDDP(FSDPTest):
         """Returns a subtest configuration that subtests CUDA initialization
         modes and prefetching settings together."""
         return {
-            "cuda_init_mode": self._get_cuda_init_modes(cpu_offload),
+            "device_init_mode": self._get_device_init_modes(cpu_offload),
             "backward_prefetch": [
                 None,
                 BackwardPrefetch.BACKWARD_PRE,
@@ -275,7 +275,7 @@ class TestParamInit(FSDPTest):
         fsdp_model = TransformerWithSharedParams.init(
             self.process_group,
             FSDPInitMode.RECURSIVE,
-            CUDAInitMode.CUDA_AFTER,
+            DEVICEInitMode.DEVICE_AFTER,
             fsdp_kwargs,
             deterministic=True,
         )
@@ -286,7 +286,7 @@ class TestParamInit(FSDPTest):
         new_fsdp_model = TransformerWithSharedParams.init(
             self.process_group,
             FSDPInitMode.RECURSIVE,
-            CUDAInitMode.CUDA_AFTER,
+            DEVICEInitMode.DEVICE_AFTER,
             fsdp_kwargs,
             deterministic=True,
         )
@@ -309,7 +309,7 @@ class TestHooks(FSDPTest):
         fsdp_model = TransformerWithSharedParams.init(
             self.process_group,
             FSDPInitMode.RECURSIVE,
-            CUDAInitMode.CUDA_BEFORE if cuda_first else CUDAInitMode.CUDA_AFTER,
+            DEVICEInitMode.DEVICE_BEFORE if cuda_first else DEVICEInitMode.DEVICE_AFTER,
         )
         self._test_pre_backward_hook_registration(fsdp_model)
 
@@ -320,7 +320,7 @@ class TestHooks(FSDPTest):
         fsdp_model = TransformerWithSharedParams.init(
             self.process_group,
             FSDPInitMode.RECURSIVE,
-            CUDAInitMode.CUDA_AFTER,
+            DEVICEInitMode.DEVICE_AFTER,
         )
         self._train_for_several_steps(fsdp_model, num_steps=2, autocast=False)
         state_dict = fsdp_model.state_dict()
@@ -354,7 +354,7 @@ class TestHooks(FSDPTest):
         fsdp_model = TransformerWithSharedParams.init(
             self.process_group,
             FSDPInitMode.RECURSIVE,
-            CUDAInitMode.CUDA_BEFORE if cuda_first else CUDAInitMode.CUDA_AFTER,
+            DEVICEInitMode.DEVICE_BEFORE if cuda_first else DEVICEInitMode.DEVICE_AFTER,
             fsdp_kwargs,
         )
         input = fsdp_model.module.get_input(torch.device("xpu"))
@@ -404,7 +404,7 @@ class TestNoGrad(FSDPTest):
         fsdp_model = TransformerWithSharedParams.init(
             self.process_group,
             FSDPInitMode.RECURSIVE,
-            CUDAInitMode.CUDA_AFTER,
+            DEVICEInitMode.DEVICE_AFTER,
             fsdp_kwargs,
         )
         self._train_for_several_steps(
