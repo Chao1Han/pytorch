@@ -66,6 +66,7 @@ from torch.testing._internal.common_utils import (
     get_cycles_per_ms,
     TEST_CUDA,
     TEST_HPU,
+    TEST_XPU,
 )
 from torch.utils._triton import has_triton
 
@@ -79,6 +80,10 @@ if TEST_CUDA:
 elif TEST_HPU:
     DEVICE_TYPE = "hpu:0"
     DISTRIBUTED_BACKEND = "hccl"
+elif TEST_XPU:
+    DEVICE_TYPE = "xpu"
+    DISTRIBUTED_BACKEND = "xccl"
+    DEVICE_COUNT = torch.xpu.device_count()
 else:
     DEVICE_TYPE = "cpu"
     DISTRIBUTED_BACKEND = "gloo"
@@ -654,6 +659,8 @@ class ModuleWithDelay(FSDPTestModel):
                 time.sleep(self.delay_before_reduction_ms / 1000)
             elif TEST_CUDA:
                 torch.cuda._sleep(int(self.delay_after_loss_ms * get_cycles_per_ms()))
+            elif TEST_XPU:
+                torch.xpu._sleep(int(self.delay_after_loss_ms * get_cycles_per_ms()))
 
         return loss
 
@@ -662,8 +669,8 @@ class ModuleWithDelay(FSDPTestModel):
 
         def _delayed_reduce_scatter(*args, **kwargs):
             if self.delay_before_reduction_ms > 0:
-                if TEST_CUDA:
-                    torch.cuda._sleep(
+                if TEST_XPU:
+                    torch.xpu._sleep(
                         int(self.delay_before_reduction_ms * get_cycles_per_ms())
                     )
                 elif TEST_HPU:
@@ -795,8 +802,8 @@ class MixtureOfExperts(NestedWrappedModule):
                 orig_reshard = torch.distributed.fsdp._runtime_utils._reshard
 
                 def _delayed_reshard(*args, **kwargs):
-                    if TEST_CUDA:
-                        torch.cuda._sleep(
+                    if TEST_XPU:
+                        torch.xpu._sleep(
                             int(self.delay_before_free_ms * get_cycles_per_ms())
                         )
                     elif TEST_HPU:
@@ -1207,8 +1214,8 @@ class FSDPTest(MultiProcessTestCase):
 
         device_ids = None
         device_id = self.rank % DEVICE_COUNT
-        if TEST_CUDA:
-            torch.cuda.set_device(device_id)
+        if TEST_XPU:
+            torch.xpu.set_device(device_id)
         device_ids = [device_id]
 
         # Execute barrier prior to running test to ensure that every process

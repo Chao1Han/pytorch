@@ -22,6 +22,7 @@ def _is_supported_device(tensor: torch.Tensor) -> bool:
         "cpu",
         "hpu",
         "mtia",
+        "xpu",
         torch._C._get_privateuse1_backend_name(),
     )
 
@@ -89,7 +90,7 @@ class ShardedGradScaler(GradScaler):
 
     def __init__(
         self,
-        device: str = "cuda",
+        device: str = "xpu",
         init_scale: float = 2.0**16,
         backoff_factor: float = 0.5,
         growth_factor: float = 2.0,

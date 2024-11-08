@@ -435,7 +435,7 @@ class SACEstimator(TorchDispatchMode):
         cuda_devices: Set[torch.device] = set()
         for o in flat_outs:
             if isinstance(o, torch.Tensor):
-                if o.device.type == "cuda":
+                if o.device.type == "xpu":
                     out_storages_cuda.update(_get_untyped_storages(o))
                     cuda_devices.add(o.device)
                 else:

@@ -96,6 +96,8 @@ class _FSDPDeviceHandle:
             return cast(_FSDPDeviceHandle, torch.cuda)
         elif device.type == "mtia":
             return cast(_FSDPDeviceHandle, torch.mtia)
+        elif device.type == "xpu":
+            return cast(_FSDPDeviceHandle, torch.xpu)
         return cls(device)
 
     def __getattr__(self, __name: str) -> Any:
@@ -535,10 +537,11 @@ def _override_module_mixed_precision(
 
 
 def _no_dispatch_record_stream(tensor: torch.Tensor, stream: torch.Stream) -> None:
-    # FIXME record_stream doesn't work with non-cuda/mtia tensors
+    # FIXME record_stream doesn't work with non-cuda/mtia/xpu tensors
     if tensor.device.type not in [
         "cuda",
         "mtia",
+        "xpu",
         torch._C._get_privateuse1_backend_name(),
     ]:
         return
@@ -554,5 +557,6 @@ def _no_dispatch_record_stream(tensor: torch.Tensor, stream: torch.Stream) -> No
         # TODO(voz): Extend a dynamo util to answer the above, unify the codepaths here.
         tensor.record_stream(stream)
     else:
-        with no_dispatch():
-            tensor.record_stream(stream)
+        pass
+        # with no_dispatch():
+        #     tensor.record_stream(stream)

@@ -108,7 +108,7 @@ class _RNGStateTracker:
     a random op (an operator that calls RNG).
     """
 
-    def __init__(self, device_type: str = "cuda"):
+    def __init__(self, device_type: str = "xpu"):
         self._device_type = device_type
         self._device_handle = _get_device_handle(device_type)
         if not (self._device_handle and self._device_handle.is_available()):
@@ -160,7 +160,7 @@ class OffsetBasedRNGTracker(_RNGStateTracker):
     random operators.
     """
 
-    def __init__(self, device_type: str = "cuda"):
+    def __init__(self, device_type: str = "xpu"):
         super().__init__(device_type)
         # synchronize RNG state using rank 0's current one
         rng_state = self._device_handle.get_rng_state().to(device_type)
@@ -340,7 +340,7 @@ class OffsetBasedRNGTracker(_RNGStateTracker):
 
 
 class TensorParallelRNGTracker(_RNGStateTracker):
-    def __init__(self, device_type: str = "cuda"):
+    def __init__(self, device_type: str = "xpu"):
         super().__init__(device_type)
         # copy the default RNG state
         self.rng_states["tensor-parallel-rng"] = self._device_handle.get_rng_state()

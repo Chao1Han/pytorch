@@ -81,7 +81,7 @@ class TestParityWithDDP(FSDPTest):
             DEVICEInitMode.DEVICE_BEFORE,
         ]
         # Note that DEVICEInitMode.DEVICE_NEVER works currently only with CPU
-        # offload as we explicitly bring the param back to CUDA device. In
+        # offload as we explicitly bring the param back to xpu device. In
         # general, it will not work since we try to all_gather p.data which is
         # on CPU but NCCL only supports GPU.
         if cpu_offload.offload_params:
@@ -90,7 +90,7 @@ class TestParityWithDDP(FSDPTest):
         return modes
 
     def _get_subtest_config(self, cpu_offload: CPUOffload) -> Dict[str, List[Any]]:
-        """Returns a subtest configuration that subtests CUDA initialization
+        """Returns a subtest configuration that subtests xpu initialization
         modes and prefetching settings together."""
         return {
             "device_init_mode": self._get_device_init_modes(cpu_offload),
@@ -182,8 +182,8 @@ class TestParityWithDDP(FSDPTest):
         sharding_strategy: Optional[ShardingStrategy],
     ):
         """Tests the FSDP forward, backward, and optimizer step runtime by
-        using a model with a long CUDA delay after the loss computation/before
-        the optimizer step to exercise the internal CUDA stream usage in that
+        using a model with a long xpu delay after the loss computation/before
+        the optimizer step to exercise the internal xpu stream usage in that
         the forward pass all-gathers do not start until after the optimizer
         step completes."""
         self.run_subtests(
@@ -204,8 +204,8 @@ class TestParityWithDDP(FSDPTest):
         sharding_strategy: Optional[ShardingStrategy],
     ):
         """Tests the FSDP forward, backward, and optimizer step runtime by
-        using a model with a long CUDA delay before the gradient reduce-scatter
-        to exercise the internal CUDA stream usage in that the backward pass
+        using a model with a long xpu delay before the gradient reduce-scatter
+        to exercise the internal xpu stream usage in that the backward pass
         waits for those reductions to finish."""
         self.run_subtests(
             self._get_subtest_config(cpu_offload),
@@ -277,7 +277,7 @@ class TestParamInit(FSDPTest):
             fsdp_kwargs,
             deterministic=True,
         )
-        input = fsdp_model.module.get_input(torch.device("cuda"))
+        input = fsdp_model.module.get_input(torch.device("xpu"))
         ref_output = fsdp_model(*input)
         # Initialize the same model but change its first parameter value
         # in-place after FSDP initialization
@@ -328,12 +328,12 @@ class TestHooks(FSDPTest):
     def _test_pre_backward_hook_registration(self, model):
         optim = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
         optim.zero_grad()
-        # Inputs always cuda, as computation happens on CUDA device only
-        input = model.module.get_input(torch.device("cuda"))
+        # Inputs always xpu, as computation happens on xpu device only
+        input = model.module.get_input(torch.device("xpu"))
         output = model(*input)
         # this is pre-bwd hook
         self.assertEqual(len(output._backward_hooks), 1)
-        loss = model.module.get_loss(input, output).cuda()
+        loss = model.module.get_loss(input, output).xpu()
         loss.backward()
         # It doesn't get removed
         self.assertEqual(len(output._backward_hooks), 1)
@@ -355,7 +355,7 @@ class TestHooks(FSDPTest):
             DEVICEInitMode.DEVICE_BEFORE if cuda_first else DEVICEInitMode.DEVICE_AFTER,
             fsdp_kwargs,
         )
-        input = fsdp_model.module.get_input(torch.device("cuda"))
+        input = fsdp_model.module.get_input(torch.device("xpu"))
 
         # Since `_register_pre_backward_hooks()` modifies the forward output,
         # we cannot directly mock it. We implement our own counter instead.
@@ -411,7 +411,7 @@ class TestNoGrad(FSDPTest):
             autocast=False,
             mixed_precision=fsdp_kwargs["mixed_precision"],
         )
-        input = fsdp_model.module.get_input(torch.device("cuda"))
+        input = fsdp_model.module.get_input(torch.device("xpu"))
         # Run a forward in eval mode
         fsdp_model.eval()
         ref_output = fsdp_model(*input)
@@ -476,7 +476,7 @@ class TestAutograd(FSDPTest):
             "backward_prefetch": backward_prefetch,
             "auto_wrap_policy": ModuleWrapPolicy({nn.Linear}),
         }
-        device = torch.device("cuda")
+        device = torch.device("xpu")
         # Define a model with enough FSDP instances to exercise prefetching
         NUM_LINEARS = 5
         model = nn.Sequential(

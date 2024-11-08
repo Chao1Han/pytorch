@@ -47,14 +47,14 @@ class TestMultiForward(FSDPTest):
         # keep everything deterministic for input data
         torch.manual_seed(0)
 
-        model = Model(wrap_fsdp).cuda()
+        model = Model(wrap_fsdp).xpu()
         if wrap_fsdp:
             model = FSDP(model)
         else:
             model = DistributedDataParallel(model, device_ids=[self.rank])
         optim = SGD(model.parameters(), lr=0.1)
 
-        in_data = torch.rand(64, 4).cuda()
+        in_data = torch.rand(64, 4).xpu()
         in_data.requires_grad = True
         for _ in range(3):
             out = model(in_data)

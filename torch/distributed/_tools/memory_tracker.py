@@ -105,7 +105,7 @@ class MemoryTracker:
             # clear and remove it for now as it does not really capture important info.
             # h3 = m.register_backward_hook(self._create_backward_hook(name))
             self._hooks.extend([h1, h2])
-        torch.cuda.empty_cache()
+        torch.xpu.empty_cache()
         assert getattr(self, "profile_mode", None) is None
         self.profile_mode = MemoryProfileDispatchMode(self)
         self.profile_mode.__enter__()
@@ -117,7 +117,7 @@ class MemoryTracker:
 
         Get some aggregated stats when the memory_tracker() is enabled, like cuda ``num_alloc_retries``.
         """
-        self._num_cuda_retries = torch.cuda.memory_stats().get("num_alloc_retries", 0)
+        self._num_cuda_retries = torch.xpu.memory_stats().get("num_alloc_retries", 0)
 
         for h in self._hooks:
             h.remove()
@@ -268,10 +268,10 @@ class MemoryTracker:
 
         The memory stats dict is indexed with ``self._op_index``.
         """
-        memory_allocated: float = torch.cuda.memory_allocated() / BYTES_PER_MB
-        memory_reserved: float = torch.cuda.memory_reserved() / BYTES_PER_MB
+        memory_allocated: float = torch.xpu.memory_allocated() / BYTES_PER_MB
+        memory_reserved: float = torch.xpu.memory_reserved() / BYTES_PER_MB
         memory_active: float = (
-            torch.cuda.memory_stats().get("active_bytes.all.current", 0) / BYTES_PER_MB
+            torch.xpu.memory_stats().get("active_bytes.all.current", 0) / BYTES_PER_MB
         )
         self.memories_allocated[self._op_index] = (fn_name, memory_allocated)
         self.memories_reserved[self._op_index] = (fn_name, memory_reserved)

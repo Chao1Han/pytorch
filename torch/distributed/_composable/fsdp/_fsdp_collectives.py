@@ -95,6 +95,7 @@ lib.define(
 
 @torch.library.impl(lib, "split_with_sizes_copy", "Meta")
 @torch.library.impl(lib, "split_with_sizes_copy", "CUDA")
+@torch.library.impl(lib, "split_with_sizes_copy", "XPU")
 @torch.library.impl(lib, "split_with_sizes_copy", "CPU")
 def split_with_sizes_copy(
     all_gather_output: torch.Tensor,
@@ -114,6 +115,7 @@ lib.define(
 
 @torch.library.impl(lib, "chunk_cat", "Meta")
 @torch.library.impl(lib, "chunk_cat", "CUDA")
+@torch.library.impl(lib, "chunk_cat", "XPU")
 @torch.library.impl(lib, "chunk_cat", "CPU")
 def chunk_cat(
     tensors: List[torch.Tensor],

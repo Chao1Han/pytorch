@@ -198,13 +198,13 @@ class RuntimeEstimator(TorchDispatchMode):
             warmup_iters, actual_iters = 2, 3
             for _ in range(warmup_iters):
                 func(*args, **kwargs)
-            start_event = torch.cuda.Event(enable_timing=True)
-            end_event = torch.cuda.Event(enable_timing=True)
-            start_event.record(torch.cuda.current_stream())
+            start_event = torch.xpu.Event(enable_timing=True)
+            end_event = torch.xpu.Event(enable_timing=True)
+            start_event.record(torch.xpu.current_stream())
             for _ in range(actual_iters):
                 func(*args, **kwargs)
-            end_event.record(torch.cuda.current_stream())
-            torch.cuda.synchronize()
+            end_event.record(torch.xpu.current_stream())
+            torch.xpu.synchronize()
             cuda_time = start_event.elapsed_time(end_event)
             mean_op_time = cuda_time / actual_iters
 
@@ -290,7 +290,7 @@ class RuntimeEstimator(TorchDispatchMode):
                 the mean operation time in milliseconds.
         """
         assert (
-            torch.cuda.is_available()
+            torch.xpu.is_available()
         ), "Roofline estimation needs to access CUDA capabilities to make estimations"
 
         def get_num_bytes(t: torch.Tensor) -> int:
