@@ -51,7 +51,7 @@ if PLATFORM_SUPPORTS_MEM_EFF_ATTENTION:
 class RingAttentionTest(DTensorTestBase):
     @property
     def world_size(self) -> int:
-        return torch.cuda.device_count()
+        return torch.xpu.device_count()
 
     @skip_if_lt_x_gpu(2)
     @skipIfRocm  # Missing _c10d_functional_autograd::all_to_all_single
