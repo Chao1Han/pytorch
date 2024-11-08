@@ -64,7 +64,7 @@ def all_gather_copy_in_meta(
     )
     return all_gather_input, all_gather_output
 
-
+@torch.library.impl(lib, "all_gather_copy_in", "XPU")
 @torch.library.impl(lib, "all_gather_copy_in", "CUDA")
 @torch.library.impl(lib, "all_gather_copy_in", "CPU")
 def all_gather_copy_in_cuda(
@@ -103,10 +103,15 @@ def split_with_sizes_copy(
     dim: int,
     out: List[torch.Tensor],
 ) -> None:
+    # WA to _unsafe_preserve_version_counter
+    prev_versions = []
+    for out_tensor in out:
+        prev_versions.append(out_tensor._version)
     torch.split_with_sizes_copy(
         all_gather_output, all_gather_input_split_sizes, dim=dim, out=out
     )
-
+    for out_tensor, tmp_version in zip(out, prev_versions):
+        torch._C._autograd._unsafe_set_version_counter(out_tensor, tmp_version)
 
 lib.define(
     "chunk_cat(Tensor[] tensors, int dim, int num_chunks, *, Tensor(a!) out) -> ()"
