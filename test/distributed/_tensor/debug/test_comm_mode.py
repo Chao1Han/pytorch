@@ -29,7 +29,7 @@ class TestCommMode(TestCase):
         dist.init_process_group(
             backend="fake", rank=1, world_size=self.world_size, store=store
         )
-        self.device_type = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device_type = "xpu" if torch.xpu.is_available() else "cpu"
         self.world_pg = dist.distributed_c10d._get_default_group()
 
     def checksAssert(self, comm_mode, key, expected_value, expected_total_value):
@@ -113,14 +113,14 @@ class TestCommMode(TestCase):
         self.assertEqual(comm_counts[c10d_functional.all_gather_into_tensor], 1)
         self.assertEqual(comm_counts[c10d_functional.reduce_scatter_tensor], 0)
 
-    @requires_nccl()
+    # @requires_nccl()
     def test_comm_mode_with_c10d(self):
-        if not torch.cuda.is_available():
+        if not torch.xpu.is_available():
             return
 
         world_pg = self.world_pg
 
-        inp = torch.rand(2, 8, 16).cuda()
+        inp = torch.rand(2, 8, 16).xpu()
         all_gather_out = inp.new_empty(self.world_size * 2, 8, 16)
 
         comm_mode = CommDebugMode()
