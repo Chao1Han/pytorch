@@ -60,8 +60,8 @@ class TestFullyShardOverlap(FSDPTest):
             # Share a stream so that all-gather and reduce-scatter block each
             # other like in `ProcessGroupNCCL`
             comm_stream.wait_stream(torch.xpu.current_stream())
-            with torch.xpu.stream(comm_stream):
-                torch.xpu._sleep(int(comm_sleep_ms * get_cycles_per_ms()))
+            # with torch.xpu.stream(comm_stream):
+            #     torch.xpu._sleep(int(comm_sleep_ms * get_cycles_per_ms()))
             torch.xpu.current_stream().wait_stream(comm_stream)
 
         def delayed_all_gather(*args, **kwargs):
@@ -160,7 +160,7 @@ class TestFullyShardOverlap(FSDPTest):
         orig_all_gather_into_tensor = dist.all_gather_into_tensor
 
         def delayed_all_gather(*args, **kwargs):
-            torch.xpu._sleep(int(comm_sleep_ms * get_cycles_per_ms()))
+            # torch.xpu._sleep(int(comm_sleep_ms * get_cycles_per_ms()))
             return orig_all_gather_into_tensor(*args, **kwargs)
 
         inp = torch.randn((2, dim), device="xpu")
@@ -223,13 +223,13 @@ class Matmul(torch.autograd.Function):
     def forward(ctx, input: torch.Tensor, weight: torch.Tensor, sleep_ms: int):
         ctx.save_for_backward(input, weight)
         ctx.sleep_ms = sleep_ms
-        torch.xpu._sleep(int(sleep_ms * get_cycles_per_ms()))
+        # torch.xpu._sleep(int(sleep_ms * get_cycles_per_ms()))
         return input @ weight
 
     @staticmethod
     def backward(ctx, grad_output: torch.Tensor):
         (input, weight) = ctx.saved_tensors
-        torch.xpu._sleep(int(2 * ctx.sleep_ms * get_cycles_per_ms()))
+        # torch.xpu._sleep(int(2 * ctx.sleep_ms * get_cycles_per_ms()))
         grad_input = grad_output @ weight.T
         grad_weight = input.T @ grad_output
         return grad_input, grad_weight, None
