@@ -330,15 +330,19 @@ class TORCH_API ProcessGroupXCCL : public Backend {
 
  private:
   std::mutex kvs_mutex;
-  ccl::shared_ptr_class<ccl::kvs> kvs;
 
-  ccl::shared_ptr_class<ccl::kvs> get_kvs(int rank, c10d::Store& store) {
+  ccl::shared_ptr_class<ccl::kvs> get_kvs(int rank, c10d::Store& store,
+    bool singleP2POp = false, const std::string& p2pKey = "", int p2pRank = 0) {
     std::lock_guard<std::mutex> lock(kvs_mutex);
-    if (kvs)
-      return kvs;
-    std::string storeKey = "xccl_kvs";
+    ccl::shared_ptr_class<ccl::kvs> kvs;
+    std::string storeKey;
+    if (!singleP2POp) {
+       storeKey = "xccl_kvs";
+    } else {
+       storeKey = p2pKey;
+    }
     // Rank 0 broadcast the bootstrap network information to other ranks
-    if (rank == 0) {
+    if (rank == 0 || (singleP2POp && p2pRank == 0)) {
       kvs = ccl::create_main_kvs();
       ccl::kvs::address_type main_addr = kvs->get_address();
       auto ccl_kvs_addr =
