@@ -1435,7 +1435,7 @@ class FSDPTest(MultiProcessTestCase):
             self.assertRaisesRegex(
                 RuntimeError,
                 "An FSDP-managed module with parameter CPU offloading enabled "
-                "has parameters on cuda",
+                "has parameters on xpu",
             )
             if expects_device_error
             else nullcontext()
