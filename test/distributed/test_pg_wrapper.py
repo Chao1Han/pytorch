@@ -439,24 +439,28 @@ class ProcessGroupGlooWrapperTest(AbstractProcessGroupWrapperTest):
         self._test_collective_shape_mismatch(pg)
 
     @skip_if_lt_x_gpu(4)
+    @requires_nccl()
     @with_dist_debug_levels(levels=["DETAIL"])
     def test_collectives_op_mismatch_cuda_debug_mode(self):
         pg = self._create_wrapper_pg(with_new_group=True)
         self._test_collectives_op_mismatch(pg, use_cuda=True)
 
     @skip_if_lt_x_gpu(4)
+    @requires_nccl()
     @with_dist_debug_levels(levels=["OFF"])
     def test_collectives_op_mismatch_cuda(self):
         pg = self._create_wrapper_pg(with_new_group=False)
         self._test_collectives_op_mismatch(pg, use_cuda=True)
 
     @skip_if_lt_x_gpu(4)
+    @requires_nccl()
     @with_dist_debug_levels(levels=["DETAIL"])
     def test_collective_shape_mismatch_cuda_debug_mode(self):
         pg = self._create_wrapper_pg(with_new_group=True)
         self._test_collective_shape_mismatch(pg, use_cuda=True)
 
     @skip_if_lt_x_gpu(4)
+    @requires_nccl()
     @with_dist_debug_levels(levels=["OFF"])
     def test_collective_shape_mismatch_cuda(self):
         pg = self._create_wrapper_pg(with_new_group=False)
