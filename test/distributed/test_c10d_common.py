@@ -32,6 +32,7 @@ from torch.testing._internal.common_distributed import (
     MultiProcessTestCase,
     skip_if_lt_x_gpu,
     get_device_count,
+    requires_nccl,
 )
 from torch.testing._internal.common_utils import (
     instantiate_parametrized_tests,
@@ -543,6 +544,7 @@ class CommonDistributedDataParallelTest:
         return input, ddp_input, target, ddp_target
 
     @skip_if_lt_x_gpu(2)
+    @requires_nccl()
     @parametrize("use_reentrant", [True, False])
     def test_ddp_checkpointing_once(self, use_reentrant):
         """
@@ -568,6 +570,7 @@ class CommonDistributedDataParallelTest:
                 )
 
     @skip_if_lt_x_gpu(2)
+    @requires_nccl()
     @parametrize("use_reentrant", [True, False])
     def test_ddp_checkpointing_unused_params(self, use_reentrant):
         """
@@ -601,6 +604,7 @@ class CommonDistributedDataParallelTest:
             )
 
     @skip_if_lt_x_gpu(2)
+    @requires_nccl()
     @parametrize("use_reentrant", [True, False])
     def test_ddp_checkpointing_twice(self, use_reentrant):
         """
@@ -634,6 +638,7 @@ class CommonDistributedDataParallelTest:
                 )
 
     @skip_if_lt_x_gpu(2)
+    @requires_nccl()
     @parametrize("use_reentrant", [True, False])
     def test_ddp_checkpointing_twice_static_graph(self, use_reentrant):
         """
@@ -651,6 +656,7 @@ class CommonDistributedDataParallelTest:
             )
 
     @skip_if_lt_x_gpu(2)
+    @requires_nccl()
     def test_ddp_checkpointing_dynamic_module(self):
         """
         Dynamic module can be checkpointed, multiple times, with non-reentrant
@@ -670,6 +676,7 @@ class CommonDistributedDataParallelTest:
             )
 
     @skip_if_lt_x_gpu(2)
+    @requires_nccl()
     def test_ddp_checkpointing_dynamic_weight_sharing(self):
         """
         Dynamic module can be checkpointed multiple times with weight sharing
@@ -690,6 +697,7 @@ class CommonDistributedDataParallelTest:
 
     # DDP works as expected if there is weight sharing among layers
     @skip_if_lt_x_gpu(2)
+    @requires_nccl()
     @parametrize("use_reentrant", [True, False])
     def test_ddp_checkpointing_weight_sharing(self, use_reentrant):
         """
@@ -713,6 +721,7 @@ class CommonDistributedDataParallelTest:
             )
 
     @skip_if_lt_x_gpu(2)
+    @requires_nccl()
     def test_ddp_checkpointing_twice_weight_sharing(self):
         """
         Checkpointing should work with static graph in the case of checkpointing
@@ -1036,10 +1045,12 @@ class CommonDistributedDataParallelTest:
                 self.assertEqual(p1.grad, p2.grad)
 
     @skip_if_lt_x_gpu(2)
+    @requires_nccl()
     def test_dataclass_output(self):
         self._test_dataclass_output(skip_o1=False)
 
     @skip_if_lt_x_gpu(2)
+    @requires_nccl()
     def test_dataclass_output_unused_param(self):
         self._test_dataclass_output(skip_o1=True)
 
