@@ -2241,6 +2241,8 @@ class DistributedDataParallel(Module, Joinable):
             or not dist.is_available()
             or not dist.is_nccl_available()
             or torch.cuda.nccl.version() < (2, 10)
+        ) and not (
+            torch.xpu.is_available() and dist.is_xccl_available()
         ):
             self._log_and_throw(
                 TypeError,

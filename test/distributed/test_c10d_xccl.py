@@ -1,15 +1,25 @@
 # Owner(s): ["oncall: distributed"]
 
 import math
+import copy
 import os
 import sys
 import time
+import random
+
 from datetime import timedelta
+from enum import auto, Enum
+from itertools import product
 from unittest import mock
 
 import torch
 import torch.distributed as c10d
-
+import torch.distributed.algorithms.ddp_comm_hooks.default_hooks as default
+import torch.distributed.algorithms.ddp_comm_hooks.powerSGD_hook as powerSGD
+from test_c10d_common import DoubleGpuNet, gpus_for_rank, ModuleForDdpCommHook
+import torch.nn.functional as F
+from torch import nn
+from torch.nn.parallel import DistributedDataParallel
 
 if not c10d.is_available() or not c10d.is_xccl_available():
     print("c10d XCCL not available, skipping tests", file=sys.stderr)
@@ -23,9 +33,12 @@ from torch.testing._internal.common_distributed import (
     init_multigpu_helper,
     MultiProcessTestCase,
     requires_xccl,
+    skip_if_lt_x_gpu,
 )
 from torch.testing._internal.common_utils import (
+    instantiate_parametrized_tests,
     retry_on_connect_failures,
+    parametrize,
     run_tests,
     skip_but_pass_in_sandcastle_if,
     TEST_XPU,
@@ -302,7 +315,7 @@ class DistributedDataParallelTest(
     @requires_xccl()
     @skip_if_lt_x_gpu(4)
     def test_ddp_multi_device_module_config(self):
-        gpus = gpus_for_rank(self.world_size)[self.rank]
+        gpus = gpus_for_rank(self.world_size, "xccl")[self.rank]
 
         self.assertTrue(len(gpus) >= 2, "expecting at least 2 gpus per process")
 
@@ -345,7 +358,7 @@ class DistributedDataParallelTest(
     def _test_fp16(self, gradient_as_bucket_view=False):
         process_group = self._get_process_group()
 
-        gpus = gpus_for_rank(self.world_size)[self.rank]
+        gpus = gpus_for_rank(self.world_size, "xccl")[self.rank]
         model = nn.Linear(1, 1, bias=False).xpu(gpus[0]).half()
         nn.init.constant_(model.weight, 1)
         ddp_model = DistributedDataParallel(
@@ -410,7 +423,7 @@ class DistributedDataParallelTest(
                     F.softmax(self.fc3(x), dim=1),
                 )
 
-        device_id = gpus_for_rank(self.world_size)[self.rank][0]
+        device_id = gpus_for_rank(self.world_size, "xccl")[self.rank][0]
         model = DistributedDataParallel(
             ForwardReturnValueModule().float().to(device_id),
             device_ids=[device_id],
@@ -519,7 +532,7 @@ class DistributedDataParallelTest(
                     F.softmax(self.module1(x), dim=1),
                 )
 
-        device_id = gpus_for_rank(self.world_size)[self.rank][0]
+        device_id = gpus_for_rank(self.world_size, "xccl")[self.rank][0]
         model = DistributedDataParallel(
             MultipleOutputModule().float().to(device_id),
             device_ids=[device_id],
@@ -573,7 +586,7 @@ class DistributedDataParallelTest(
                 x = self.relu(self.fc2(x))
                 return F.softmax(x, dim=1)
 
-        device_id = gpus_for_rank(self.world_size)[self.rank][0]
+        device_id = gpus_for_rank(self.world_size, "xccl")[self.rank][0]
         model = DistributedDataParallel(
             NoGradModule().float().to(device_id),
             device_ids=[device_id],
@@ -603,7 +616,7 @@ class DistributedDataParallelTest(
         # This is NOT the recommended way to implement accumulating grads, but
         # we would like to make sure DDP does not mess up with the underlying
         # module.
-        int_devices = gpus_for_rank(self.world_size)[self.rank][:1]
+        int_devices = gpus_for_rank(self.world_size, "xccl")[self.rank][:1]
         devices = [torch.device("xpu:" + str(i)) for i in int_devices]
         process_group = self._get_process_group()
         global_batch_size = self.world_size
@@ -678,7 +691,7 @@ class DistributedDataParallelTest(
                 x = self.relu(self.fc2(x))
                 return F.softmax(x, dim=1)
 
-        device_id = gpus_for_rank(self.world_size)[self.rank][0]
+        device_id = gpus_for_rank(self.world_size, "xccl")[self.rank][0]
         model = TestModel().float().to(device_id)
         ddp = DistributedDataParallel(
             model,
@@ -744,7 +757,7 @@ class DistributedDataParallelTest(
         state=None,
         static_graph=False,
     ):
-        device_id = gpus_for_rank(self.world_size)[self.rank][0]
+        device_id = gpus_for_rank(self.world_size, "xccl")[self.rank][0]
         gpu_model = DistributedDataParallel(
             ModuleForDdpCommHook().to(device_id),
             device_ids=[device_id],
@@ -1172,7 +1185,7 @@ class DistributedDataParallelTest(
                 return x
 
         process_group = self._get_process_group()
-        device_id = gpus_for_rank(self.world_size)[self.rank][0]
+        device_id = gpus_for_rank(self.world_size, "xccl")[self.rank][0]
         N, C, H, W = 1, 16, 64, 64
         ddp_model = DistributedDataParallel(
             FFTModel(hin=H, win=W, n_features=C).to(device_id),
