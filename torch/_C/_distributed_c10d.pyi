@@ -521,6 +521,9 @@ class ProcessGroup:
     @property
     def group_desc(self) -> str: ...
 
+class FakeProcessGroup(Backend):
+    def __init__(self, rank: int, world_size: int) -> None: ...
+
 class ProcessGroupGloo(Backend):
     class Device: ...
 
@@ -669,33 +672,14 @@ class _SymmetricMemory:
     def barrier(self, channel: int = 0) -> None: ...
     def put_signal(self, dst_rank: int, channel: int = 0) -> None: ...
     def wait_signal(self, src_rank: int, channel: int = 0) -> None: ...
-
-class ProcessGroupCudaP2P(Backend):
-    class Options:
-        nccl_options: Optional[ProcessGroupNCCL.Options]
-        buffer_size: Optional[int]
-
-        def __init__(self) -> None: ...
-
-    def __init__(
-        self,
-        store: Store,
-        rank: int,
-        size: int,
-        options: ProcessGroupCudaP2P.Options,
-    ) -> None: ...
-    def is_p2p_available(self) -> bool: ...
-    def get_buffer_size(self) -> int: ...
-    def stream(self) -> torch.cuda.Stream: ...
-    def intra_node_barrier(self) -> Work: ...
-    def get_p2p_buffer(
-        self,
-        rank: int,
-        sizes: torch.Size,
-        dtype: torch.dtype,
-        storage_offset: Optional[int] = 0,
+    @staticmethod
+    def memset32(
+        tensor: torch.Tensor, offset: int, val: int, count: int
     ) -> torch.Tensor: ...
-    def _shutdown(self) -> None: ...
+    @staticmethod
+    def stream_write_value32(
+        tensor: torch.Tensor, offset: int, val: int
+    ) -> torch.Tensor: ...
 
 class ProcessGroupXCCL(Backend):
     def __init__(
