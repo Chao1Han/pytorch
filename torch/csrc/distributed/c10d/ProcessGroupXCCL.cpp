@@ -1137,7 +1137,7 @@ c10::intrusive_ptr<Work> ProcessGroupXCCL::reduce(
             comm,
             ccl::create_stream(stream.queue()));
         // WA due to oneCCL not support AVG
-        if (opts.reduceOp == ReduceOp::AVG) {
+        if (opts.reduceOp == ReduceOp::AVG && getRank() == root) {
           auto divisor = getSize();
           output.div_(divisor);
         }
@@ -1175,7 +1175,7 @@ c10::intrusive_ptr<Work> ProcessGroupXCCL::_reduce_oop(
             comm,
             ccl::create_stream(stream.queue()));
         // WA due to oneCCL not support AVG
-        if (opts.reduceOp == ReduceOp::AVG) {
+        if (opts.reduceOp == ReduceOp::AVG && getRank() == root) {
           auto divisor = getSize();
           output.div_(divisor);
         }
