@@ -155,6 +155,16 @@ class ProcessGroupXCCLOpTest(MultiProcContinousTest):
             tensors[0],
         )
 
+        # Avg
+        tensors = [torch.tensor([self.rank + 1.0]).xpu(local_device_id)]
+
+        allreduce(tensors, c10d.ReduceOp.AVG)
+        ndev = self.world_size
+        self.assertEqual(
+            torch.tensor([ndev * (ndev + 1.0) / (2.0 * ndev)]),
+            tensors[0],
+        )
+
         # Product
         tensors = [torch.tensor([self.rank + 1]).xpu(local_device_id)]
 
