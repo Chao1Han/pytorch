@@ -1384,7 +1384,12 @@ class AbstractCommTest:
             rank=self.rank,
             store=store,
         )
-        device = "cuda" if backend == "nccl" else "cpu"
+        if backend == "xccl":
+            device = "xpu"
+        elif backend == "nccl":
+            backend = "cuda"
+        else:
+            device = "cpu"
         # test alltoall_base
         tensor = torch.tensor([1, 0, 0, 1], dtype=torch.bool, device=device)
         zeros = torch.tensor([0, 0, 0, 0], dtype=torch.bool, device=device)
@@ -1875,7 +1880,12 @@ class ProcessGroupWithDispatchedCollectivesTests(MultiProcessTestCase):
         # correctly dispatched
 
         # TODO: this will be updated in the future to not be backend specific
-        device = "cuda" if backend == "nccl" else "cpu"
+        if backend == "xccl":
+            device = "xpu"
+        elif backend == "nccl":
+            backend = "cuda"
+        else:
+            device = "cpu"
         # ensure supported devices (cpu, cuda) succeeds during dispatch call
         tensor = torch.zeros(2, 2, device=torch.device(device))
         # multi tensor collectives
@@ -1946,7 +1956,7 @@ class ProcessGroupWithDispatchedCollectivesTests(MultiProcessTestCase):
             rank=self.rank,
             store=store,
         )
-        if backend == "ccl":
+        if backend == "xccl":
             device = "xpu"
         elif backend == "nccl":
             backend = "cuda"
