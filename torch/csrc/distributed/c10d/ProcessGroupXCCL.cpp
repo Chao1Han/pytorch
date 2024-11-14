@@ -147,6 +147,10 @@ ccl::reduction getXcclReduceOp(const ReduceOp& reduceOp, at::Tensor& input) {
       // Map sum to max for bool tensors to avoid overflow issues with sum.
       return ccl::reduction::max;
     }
+    // WA due to oneCCL not support AVG
+    if (reduceOp == ReduceOp::AVG) {
+      return ccl::reduction::sum;
+    }
     return xcclOps.at(reduceOp);
   } catch (const std::out_of_range&) {
     C10_THROW_ERROR(
@@ -894,6 +898,11 @@ c10::intrusive_ptr<Work> ProcessGroupXCCL::allreduce_impl(
             xcclReduceOp,
             comm,
             ccl::create_stream(stream.queue()));
+        // WA due to oneCCL not support AVG
+        if (opts.reduceOp == ReduceOp::AVG) {
+          auto divisor = getSize();
+          output.div_(divisor);
+        }
         return;
       },
       OpType::ALLREDUCE,
@@ -942,6 +951,11 @@ c10::intrusive_ptr<Work> ProcessGroupXCCL::allreduce(
             xcclReduceOp,
             comm,
             ccl::create_stream(stream.queue()));
+        // WA due to oneCCL not support AVG
+        if (opts.reduceOp == ReduceOp::AVG) {
+          auto divisor = getSize();
+          output.div_(divisor);
+        }
         return;
       },
       OpType::ALLREDUCE,
@@ -988,6 +1002,11 @@ c10::intrusive_ptr<Work> ProcessGroupXCCL::allreduce_coalesced(
             xcclReduceOp,
             comm,
             ccl::create_stream(stream.queue()));
+        // WA due to oneCCL not support AVG
+        if (opts.reduceOp == ReduceOp::AVG) {
+          auto divisor = getSize();
+          output.div_(divisor);
+        }
         return;
       },
       OpType::COALESCED,
@@ -1117,6 +1136,11 @@ c10::intrusive_ptr<Work> ProcessGroupXCCL::reduce(
             root,
             comm,
             ccl::create_stream(stream.queue()));
+        // WA due to oneCCL not support AVG
+        if (opts.reduceOp == ReduceOp::AVG && getRank() == root) {
+          auto divisor = getSize();
+          output.div_(divisor);
+        }
         return;
       },
       OpType::REDUCE,
@@ -1150,6 +1174,11 @@ c10::intrusive_ptr<Work> ProcessGroupXCCL::_reduce_oop(
             root,
             comm,
             ccl::create_stream(stream.queue()));
+        // WA due to oneCCL not support AVG
+        if (opts.reduceOp == ReduceOp::AVG && getRank() == root) {
+          auto divisor = getSize();
+          output.div_(divisor);
+        }
         return;
       },
       OpType::REDUCE,
@@ -1370,6 +1399,11 @@ c10::intrusive_ptr<Work> ProcessGroupXCCL::reduce_scatter(
               xcclReduceOp,
               comm,
               ccl::create_stream(stream.queue()));
+          // WA due to oneCCL not support AVG
+          if (opts.reduceOp == ReduceOp::AVG) {
+            auto divisor = getSize();
+            output.div_(divisor);
+          }
           return;
         },
         [&](at::xpu::XPUStream& Stream,
@@ -1453,6 +1487,11 @@ c10::intrusive_ptr<Work> ProcessGroupXCCL::_reduce_scatter_base(
             xcclReduceOp,
             comm,
             ccl::create_stream(stream.queue()));
+        // WA due to oneCCL not support AVG
+        if (opts.reduceOp == ReduceOp::AVG) {
+          auto divisor = getSize();
+          output.div_(divisor);
+        }
         return;
       },
       OpType::_REDUCE_SCATTER_BASE,
@@ -1482,6 +1521,11 @@ c10::intrusive_ptr<Work> ProcessGroupXCCL::reduce_scatter_tensor_coalesced(
             xcclReduceOp,
             comm,
             ccl::create_stream(stream.queue()));
+        // WA due to oneCCL not support AVG
+        if (opts.reduceOp == ReduceOp::AVG) {
+          auto divisor = getSize();
+          output.div_(divisor);
+        }
         return;
       },
       OpType::COALESCED,
