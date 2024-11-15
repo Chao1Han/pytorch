@@ -44,6 +44,7 @@ if TEST_WITH_DEV_DBG_ASAN:
 
 TEST_MULTIGPU = TEST_XPU and torch.xpu.device_count() >= 2
 
+
 class ProcessGroupXCCLOpTest(MultiProcContinousTest):
     @classmethod
     def backend_str(cls) -> str:
@@ -255,7 +256,6 @@ class ProcessGroupXCCLOpTest(MultiProcContinousTest):
                     ValueError, "Cannot use " + err + " with XCCL"
                 ):
                     reduce(tensors, self.rank, rt, op)
-
 
     @requires_xccl()
     @skip_but_pass_in_sandcastle_if(not TEST_MULTIGPU, "XCCL test requires 2+ GPUs")
@@ -710,7 +710,6 @@ class ProcessGroupXCCLOpTest(MultiProcContinousTest):
         expected = torch.tensor(prod_val)
         self.assertEqual(expected, output_tensor)
 
-
     @requires_xccl()
     @skip_but_pass_in_sandcastle_if(not TEST_MULTIGPU, "XCCL test requires 2+ GPUs")
     def test_reduce_scatter_base_ops(self):
@@ -830,4 +829,3 @@ if __name__ == "__main__":
             nprocs=world_size,
             args=(world_size, rdvz_file),
         )
-
