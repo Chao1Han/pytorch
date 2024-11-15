@@ -1,41 +1,25 @@
 #pragma once
 
-#if defined(__linux__)
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <unistd.h>
-#endif
-
 #ifdef USE_C10D_XCCL
-#include <ATen/xpu/XPUEvent.h>
-#include <oneapi/ccl.hpp>
-#include <torch/csrc/distributed/c10d/Store.hpp>
-#include <exception>
-#include <memory>
-#include <vector>
+// We will define those flags in XCCL backend file instead of passing to gcc
+// compiler.
+#define CCL_ENABLE_ZE
+#define CCL_ENABLE_SYCL
 
-#include <atomic>
-#include <chrono>
+#include <oneapi/ccl.hpp>
+#include <exception>
 #include <future>
-#include <iostream>
 #include <list>
 #include <mutex>
-#include <thread>
 #include <unordered_map>
+#include <vector>
 
+#include <ATen/xpu/XPUEvent.h>
 #include <c10/core/StreamGuard.h>
 #include <c10/xpu/XPUCachingAllocator.h>
 #include <torch/csrc/distributed/c10d/Backend.hpp>
-#include <torch/csrc/distributed/c10d/PrefixStore.hpp>
+#include <torch/csrc/distributed/c10d/Store.hpp>
 namespace c10d {
-
-namespace {
-struct AutoXcclGroup {
-  AutoXcclGroup();
-  ~AutoXcclGroup() noexcept(false);
-};
-} // namespace
 
 static std::vector<std::string> TORCH_XCCL_BLOCKING_WAIT = {
     "TORCH_XCCL_BLOCKING_WAIT",
@@ -53,16 +37,13 @@ class TORCH_API ProcessGroupXCCL : public Backend {
         at::Device& device,
         int rank,
         OpType opType,
+        uint64_t seq,
+        const char* profilingTitle = nullptr,
         const std::optional<std::vector<at::Tensor>>& inputs = std::nullopt);
     WorkXCCL(const WorkXCCL& w);
     ~WorkXCCL() override;
 
     bool isCompleted() override;
-
-    bool isSuccess() const override {
-      TORCH_CHECK(
-          false, "ProcessGroupXCCL::WorkXCCL::isSuccess not implemented");
-    }
 
     void abort() override {
       TORCH_CHECK(false, "ProcessGroupXCCL::WorkXCCL::abort not implemented");
@@ -76,6 +57,10 @@ class TORCH_API ProcessGroupXCCL : public Backend {
       return future_;
     }
 
+    uint64_t getSequencenumber() const override {
+      return seq_;
+    }
+
     std::vector<at::Tensor> result() override {
       return *outputs_;
     }
@@ -86,6 +71,7 @@ class TORCH_API ProcessGroupXCCL : public Backend {
     at::Tensor barrierTensor_;
     bool blockingWait_ = false;
     std::chrono::time_point<std::chrono::steady_clock> workStartTime_;
+    uint64_t seq_;
 
    private:
     void synchronizeInternal(std::chrono::milliseconds timeout);
@@ -117,12 +103,16 @@ class TORCH_API ProcessGroupXCCL : public Backend {
 
   std::shared_ptr<xcclComm_t> getXCCLComm(
       const std::string& deviceKey,
-      at::Device& device);
+      at::Device& device,
+      OpType opType,
+      int p2pRank = 0,
+      bool isSendRecvSelf = false);
 
   virtual c10::intrusive_ptr<ProcessGroupXCCL::WorkXCCL> initWork(
       at::Device& device,
       int rank,
       OpType opType,
+      const char* profilingTitle = nullptr,
       const std::vector<at::Tensor>& inputs = {},
       const std::vector<at::Tensor>& outputs = {});
 
@@ -131,7 +121,19 @@ class TORCH_API ProcessGroupXCCL : public Backend {
       at::Tensor& input,
       at::Tensor& output,
       Fn fn,
-      OpType opType);
+      OpType opType,
+      const char* profilingTitle = nullptr) {
+    return collective<Fn>(
+        input,
+        output,
+        fn,
+        [](at::xpu::XPUStream&,
+           c10::intrusive_ptr<ProcessGroupXCCL::WorkXCCL>&) {},
+        [](at::xpu::XPUStream&,
+           c10::intrusive_ptr<ProcessGroupXCCL::WorkXCCL>&) {},
+        opType,
+        profilingTitle);
+  }
 
   template <typename Fn, typename PreProcess, typename PostProcess>
   c10::intrusive_ptr<Work> collective(
@@ -140,7 +142,31 @@ class TORCH_API ProcessGroupXCCL : public Backend {
       Fn fn,
       PreProcess pre,
       PostProcess post,
-      OpType opType);
+      OpType opType,
+      const char* profilingTitle = nullptr) {
+    auto inputs = std::vector<at::Tensor>{input};
+    auto outputs = std::vector<at::Tensor>{output};
+    return collective(inputs, outputs, fn, pre, post, opType, profilingTitle);
+  }
+
+  template <typename Fn>
+  c10::intrusive_ptr<Work> collective(
+      std::vector<at::Tensor>& inputs,
+      std::vector<at::Tensor>& outputs,
+      Fn fn,
+      OpType opType,
+      const char* profilingTitle = nullptr) {
+    return collective<Fn>(
+        inputs,
+        outputs,
+        fn,
+        [](at::xpu::XPUStream&,
+           c10::intrusive_ptr<ProcessGroupXCCL::WorkXCCL>&) {},
+        [](at::xpu::XPUStream&,
+           c10::intrusive_ptr<ProcessGroupXCCL::WorkXCCL>&) {},
+        opType,
+        profilingTitle);
+  }
 
   template <typename Fn, typename PreProcess, typename PostProcess>
   c10::intrusive_ptr<Work> collective(
@@ -149,14 +175,39 @@ class TORCH_API ProcessGroupXCCL : public Backend {
       Fn fn,
       PreProcess pre,
       PostProcess post,
-      OpType opType);
+      OpType opType,
+      const char* profilingTitle = nullptr);
 
   template <typename Fn>
   c10::intrusive_ptr<Work> collectiveCoalesced(
       std::vector<at::Tensor>& input,
       std::vector<at::Tensor>& output,
       Fn fn,
-      OpType opType);
+      OpType opType,
+      const char* profilingTitle = nullptr) {
+    return collective<Fn>(
+        input,
+        output,
+        fn,
+        [](at::xpu::XPUStream&,
+           c10::intrusive_ptr<ProcessGroupXCCL::WorkXCCL>&) {
+          ccl::group_start();
+        },
+        [](at::xpu::XPUStream&,
+           c10::intrusive_ptr<ProcessGroupXCCL::WorkXCCL>&) {
+          ccl::group_end();
+        },
+        opType,
+        profilingTitle);
+  }
+
+  template <typename Fn>
+  c10::intrusive_ptr<Work> pointToPoint(
+      at::Tensor& tensor,
+      Fn fn,
+      int peer,
+      OpType opType,
+      const char* profilingTitle = nullptr);
 
   c10::intrusive_ptr<Work> allreduce_impl(
       at::Tensor& tensor,
@@ -173,9 +224,7 @@ class TORCH_API ProcessGroupXCCL : public Backend {
 
   c10::intrusive_ptr<Work> reduce(
       std::vector<at::Tensor>& tensors,
-      const ReduceOptions& opts = ReduceOptions()) override {
-    TORCH_CHECK(false, "ProcessGroupXCCL::reduce not implemented");
-  }
+      const ReduceOptions& opts = ReduceOptions()) override;
 
   c10::intrusive_ptr<Work> _reduce_oop(
       at::Tensor& outputTensors,
@@ -200,13 +249,6 @@ class TORCH_API ProcessGroupXCCL : public Backend {
       at::Tensor& outputbuffer,
       at::Tensor& inputbuffer,
       const AllgatherOptions& opts = AllgatherOptions()) override;
-
-  c10::intrusive_ptr<Work> allgather_coalesced(
-      std::vector<std::vector<at::Tensor>>& outputTensorLists,
-      std::vector<at::Tensor>& inputTensors,
-      const AllgatherOptions& opts = AllgatherOptions()) override {
-    TORCH_CHECK(false, "ProcessGroupXCCL::allgather_coalesced not implemented");
-  }
 
   c10::intrusive_ptr<Work> allgather_into_tensor_coalesced(
       std::vector<at::Tensor>& outputs,
@@ -236,30 +278,22 @@ class TORCH_API ProcessGroupXCCL : public Backend {
       at::Tensor& inputTensor,
       std::vector<int64_t>& outputSplitSizes,
       std::vector<int64_t>& inputSplitSizes,
-      const AllToAllOptions& opts = AllToAllOptions()) override {
-    TORCH_CHECK(false, "ProcessGroupXCCL::alltoall_base not implemented");
-  }
+      const AllToAllOptions& opts = AllToAllOptions()) override;
 
   c10::intrusive_ptr<Work> alltoall(
       std::vector<at::Tensor>& outputTensors,
       std::vector<at::Tensor>& inputTensors,
-      const AllToAllOptions& opts = AllToAllOptions()) override {
-    TORCH_CHECK(false, "ProcessGroupXCCL::alltoall not implemented");
-  }
+      const AllToAllOptions& opts = AllToAllOptions()) override;
 
   c10::intrusive_ptr<Work> send(
       std::vector<at::Tensor>& tensors,
       int dstRank,
-      int tag) override {
-    TORCH_CHECK(false, "ProcessGroupXCCL::send not implemented");
-  }
+      int tag) override;
 
   c10::intrusive_ptr<Work> recv(
       std::vector<at::Tensor>& tensors,
       int srcRank,
-      int tag) override {
-    TORCH_CHECK(false, "ProcessGroupXCCL::recv not implemented");
-  }
+      int tag) override;
 
   void groupStart();
 
@@ -268,23 +302,23 @@ class TORCH_API ProcessGroupXCCL : public Backend {
   c10::intrusive_ptr<Work> gather(
       std::vector<std::vector<at::Tensor>>& outputTensors,
       std::vector<at::Tensor>& inputTensors,
-      const GatherOptions& opts = GatherOptions()) override {
-    TORCH_CHECK(false, "ProcessGroupXCCL::gather not implemented");
-  }
+      const GatherOptions& opts = GatherOptions()) override;
 
   c10::intrusive_ptr<Work> scatter(
       std::vector<at::Tensor>& outputTensors,
       std::vector<std::vector<at::Tensor>>& inputTensors,
-      const ScatterOptions& opts = ScatterOptions()) override {
-    TORCH_CHECK(false, "ProcessGroupXCCL::scatter not implemented");
-  }
+      const ScatterOptions& opts = ScatterOptions()) override;
+
+  void setSequenceNumberForGroup() override;
+
+  uint64_t getSequenceNumberForGroup() override;
 
  protected:
-  std::unordered_map<std::string, at::xpu::XPUStream> xcclStreams_;
-  std::unordered_map<std::string, std::shared_ptr<xcclComm_t>>
-      inInitializationCommMap_;
+  std::unordered_map<std::string, at::xpu::XPUStream> xcclStreamsMap_;
+  std::unordered_map<std::string, at::xpu::XPUEvent> xcclEventsMap_;
   std::unordered_map<std::string, std::shared_ptr<xcclComm_t>> devXCCLCommMap_;
   c10::intrusive_ptr<Store> store_;
+  uint64_t xcclCommCounter_{0};
   std::mutex mutex_;
   std::set<int> usedDeviceIdxs_;
   int coalescing_state_ = 0;
@@ -292,16 +326,28 @@ class TORCH_API ProcessGroupXCCL : public Backend {
   std::shared_ptr<xcclComm_t> coalescedComm_ = nullptr;
   bool blockingWait_ = false;
   static thread_local uint64_t xcclActiveGroupCounter_;
+  uint64_t seqCollective_{0};
+  uint64_t seqP2P_{0};
+
  private:
-  XCCL_KVS kvs;
   std::mutex kvs_mutex;
-  XCCL_KVS get_kvs(int rank, c10d::Store& store) {
+
+  ccl::shared_ptr_class<ccl::kvs> get_kvs(
+      int rank,
+      c10d::Store& store,
+      bool singleP2POp = false,
+      const std::string& p2pKey = "",
+      int p2pRank = 0) {
     std::lock_guard<std::mutex> lock(kvs_mutex);
-    if (kvs)
-      return kvs;
-    std::string storeKey = "xccl_kvs";
+    ccl::shared_ptr_class<ccl::kvs> kvs;
+    std::string storeKey;
+    if (!singleP2POp) {
+      storeKey = std::to_string(xcclCommCounter_++);
+    } else {
+      storeKey = p2pKey;
+    }
     // Rank 0 broadcast the bootstrap network information to other ranks
-    if (rank == 0) {
+    if (rank == 0 || (singleP2POp && p2pRank == 0)) {
       kvs = ccl::create_main_kvs();
       ccl::kvs::address_type main_addr = kvs->get_address();
       auto ccl_kvs_addr =
@@ -320,41 +366,6 @@ class TORCH_API ProcessGroupXCCL : public Backend {
     return kvs;
   }
 };
-
-namespace {
-int getXCCLEnvVar(std::string envVarName) {
-  char* stringValue = std::getenv(envVarName.c_str());
-  if (stringValue != nullptr) {
-    try {
-      int val = std::stoi(stringValue);
-      return val;
-    } catch (std::exception& e) {
-      TORCH_CHECK(
-          false,
-          "Invalid value for environment variable: " + std::string(envVarName));
-    }
-  } else {
-    return -1;
-  }
-}
-
-template <typename T>
-void setXCCLEnvVar(const std::string& envVarName, T val) {
-  if constexpr (std::is_same_v<T, int>) {
-    setenv(envVarName.c_str(), std::to_string(val).c_str(), 1);
-  } else if constexpr (std::is_same_v<T, std::string>) {
-    setenv(envVarName.c_str(), val.c_str(), 1);
-  }
-}
-
-bool with_mpirun() {
-  return (getenv("MPI_LOCALRANKID") || getenv("MPI_LOCALNRANKS") ||
-          getenv("PMI_RANK") || getenv("PMI_SIZE") || getenv("PMIX_RANK"))
-      ? true
-      : false;
-}
-
-} // namespace
 } // namespace c10d
 
 #endif // USE_C10D_XCCL

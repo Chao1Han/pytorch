@@ -24,6 +24,7 @@ from io import StringIO
 from typing import Dict, NamedTuple, Optional, Union, List, Any, Callable, Tuple
 from unittest.mock import patch
 
+from torch._logging._internal import trace_log
 import torch
 import torch._dynamo.test_case
 import torch.cuda.nccl
@@ -93,8 +94,9 @@ class DistTestCases:
 
     # Sets showing that something is implemented
     backend_feature = {}
-    backend_feature["gpu"] = {"nccl", "gloo", "ucc"}
+    backend_feature["gpu"] = {"nccl", "gloo", "ucc", "xccl"}
     backend_feature["cuda"] = {"nccl", "gloo", "ucc"}
+    backend_feature["xpu"] = {"xccl"}
     backend_feature["ddp"] = {"nccl", "gloo", "ucc"}
     backend_feature["subgroup"] = {"nccl", "gloo", "ucc"}
     backend_feature["plugin"] = set()
@@ -117,10 +119,16 @@ def skip_if_no_gpu(func):
     return wrapper
 
 
+# TODO (kwen2501): what is the purpose of this decorator?  Tests with this
+# decorator were always skipped. So they may be outdated already.
+# Oct 2024: bumping the small-world criteria to < 8, as we are increasing the
+# number of GPUs in CI from 2 to 4, and we need to continue skipping those tests
+# to keep CI green. But this is just a temporary solution. We should clean up
+# those tests somehow.
 def skip_if_small_worldsize(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
-        if (os.environ["BACKEND"] != "mpi") and int(os.environ["WORLD_SIZE"]) <= 2:
+        if (os.environ["BACKEND"] != "mpi") and int(os.environ["WORLD_SIZE"]) < 8:
             sys.exit(TEST_SKIPS["small_worldsize"].exit_code)
 
         return func(*args, **kwargs)
@@ -360,6 +368,22 @@ def skip_if_win32():
     )
 
 
+def sm_is_or_higher_than(device: torch.device, major: int, minor: int) -> bool:
+    """
+    Returns True if the device's compute capability is (major, minor) or higher.
+    Error out if the device is not a CUDA device.
+    Returns False if device is a RoCM device.
+    """
+    if device.type != "cuda":
+        raise ValueError("sm_is_or_later() is only supported for CUDA devices")
+
+    if torch.version.hip is not None:
+        # ROCm devices may have different compute capability codes
+        return False
+
+    return torch.cuda.get_device_capability(device) >= (major, minor)
+
+
 @retry_on_connect_failures
 def create_tcp_store(
     addr="localhost",
@@ -462,6 +486,15 @@ def simple_sparse_reduce_tests(rank: int, world_size: int, num_inputs: int = 1):
         ]
     ]
 
+# Returns the number of GPUs, currently only for CUDA and XPU.
+def get_device_count(backend: str):
+    assert c10d.is_backend_available(backend)
+    if backend in DistTestCases.backend_feature.get("cuda", set()):
+        return torch.cuda.device_count()
+    elif backend in DistTestCases.backend_feature.get("xpu", set()):
+        return torch.xpu.device_count()
+    else:
+        raise ValueError(f"Unsupported backend: {backend}")
 
 # HELPER FOR MULTIGPU TESTS
 def init_multigpu_helper(world_size: int, backend: str):
@@ -470,7 +503,7 @@ def init_multigpu_helper(world_size: int, backend: str):
     On a single node, all visible GPUs are evenly
     divided to subsets, each process only uses a subset.
     """
-    nGPUs = torch.xpu.device_count() if torch.xpu.is_available() else torch.cuda.device_count()
+    nGPUs = get_device_count(backend)
     visible_devices = range(nGPUs)
 
     # If rank is less than or equal to number of available GPU's
@@ -680,7 +713,7 @@ class MultiProcessTestCase(TestCase):
                 "Process %s skipping test %s for following reason: %s", self.rank, test_name, str(se)
             )
             sys.exit(TEST_SKIPS["generic"].exit_code)
-        except Exception as e:
+        except Exception:
             logger.error(
                 "Caught exception: \n%s exiting "
                 "process %s with exit code: %s",
@@ -1333,6 +1366,8 @@ class DynamoDistributedMultiProcTestCase(MultiProcessTestCase):
 
     @classmethod
     def _run(cls, rank: int, test_name: str, file_name: str, parent_pipe, **kwargs) -> None:
+        trace_log.addHandler(logging.NullHandler())
+
         # The rest is copypasta from MultiProcessTestCase._run
         self = cls(test_name)
         self.rank = rank
