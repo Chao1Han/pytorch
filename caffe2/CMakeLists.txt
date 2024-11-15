@@ -1049,6 +1049,13 @@ elseif(USE_CUDA)
 endif()
 
 if(USE_XPU)
+  # if SYCL runtime and oneCCL runtime are both system installed
+  # then building flag USE_XPU=ON , USE_XCCL=ON and USE_C10D_XCCL=ON;
+  # XCCL backend will be build in libtorch_xpu;
+  # manually set `USE_XCCL=OFF` disable XCCL backend building.
+  if(USE_XCCL)
+    append_filelist("libtorch_xpu_distributed_extra_sources" Caffe2_XPU_SRCS)
+  endif()
   list(APPEND Caffe2_XPU_SRCS ${GENERATED_CXX_TORCH_XPU})
   add_library(torch_xpu ${Caffe2_XPU_SRCS})
   torch_compile_options(torch_xpu)  # see cmake/public/utils.cmake
@@ -1117,6 +1124,10 @@ if(USE_XPU)
     # Set cached ${ATen_XPU_INCLUDE_DIRS} to torch
     include_directories(SYSTEM ${ATen_XPU_INCLUDE_DIRS})
 
+  endif()
+  if(USE_XCCL)
+    target_link_libraries(torch_xpu PRIVATE torch::xccl)
+    target_compile_definitions(torch_xpu PRIVATE USE_XCCL)
   endif()
 endif()
 
@@ -1403,6 +1414,9 @@ if(USE_DISTRIBUTED)
     else()
       target_compile_definitions(torch_cuda PUBLIC USE_C10D_NCCL)
     endif()
+  endif()
+  if(USE_XPU AND USE_C10D_XCCL)
+    target_compile_definitions(torch_xpu PUBLIC USE_C10D_XCCL)
   endif()
   if(USE_MPI AND USE_C10D_MPI)
     if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU")

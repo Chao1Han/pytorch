@@ -94,8 +94,9 @@ class DistTestCases:
 
     # Sets showing that something is implemented
     backend_feature = {}
-    backend_feature["gpu"] = {"nccl", "gloo", "ucc"}
+    backend_feature["gpu"] = {"nccl", "gloo", "ucc", "xccl"}
     backend_feature["cuda"] = {"nccl", "gloo", "ucc"}
+    backend_feature["xpu"] = {"xccl"}
     backend_feature["ddp"] = {"nccl", "gloo", "ucc"}
     backend_feature["subgroup"] = {"nccl", "gloo", "ucc"}
     backend_feature["plugin"] = set()
@@ -187,7 +188,8 @@ def skip_if_lt_x_gpu(x):
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
-            if torch.cuda.is_available() and torch.cuda.device_count() >= x:
+            if (torch.cuda.is_available() and torch.cuda.device_count() >= x) or \
+               (torch.xpu.is_available() and torch.xpu.device_count() >= x):
                 return func(*args, **kwargs)
             sys.exit(TEST_SKIPS[f"multi-gpu-{x}"].exit_code)
 
@@ -325,6 +327,12 @@ def requires_nccl():
     return skip_but_pass_in_sandcastle_if(
         not c10d.is_nccl_available(),
         "c10d was not compiled with the NCCL backend",
+    )
+
+def requires_xccl():
+    return skip_but_pass_in_sandcastle_if(
+        not c10d.is_xccl_available(),
+        "c10d was not compiled with the XCCL backend",
     )
 
 def requires_ucc():
@@ -478,6 +486,15 @@ def simple_sparse_reduce_tests(rank: int, world_size: int, num_inputs: int = 1):
         ]
     ]
 
+# Returns the number of GPUs, currently only for CUDA and XPU.
+def get_device_count(backend: str):
+    assert c10d.is_backend_available(backend)
+    if backend in DistTestCases.backend_feature.get("cuda", set()):
+        return torch.cuda.device_count()
+    elif backend in DistTestCases.backend_feature.get("xpu", set()):
+        return torch.xpu.device_count()
+    else:
+        raise ValueError(f"Unsupported backend: {backend}")
 
 # HELPER FOR MULTIGPU TESTS
 def init_multigpu_helper(world_size: int, backend: str):
@@ -486,7 +503,7 @@ def init_multigpu_helper(world_size: int, backend: str):
     On a single node, all visible GPUs are evenly
     divided to subsets, each process only uses a subset.
     """
-    nGPUs = torch.cuda.device_count()
+    nGPUs = get_device_count(backend)
     visible_devices = range(nGPUs)
 
     # If rank is less than or equal to number of available GPU's
