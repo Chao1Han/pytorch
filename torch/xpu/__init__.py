@@ -459,6 +459,33 @@ def _get_rng_state_offset(device: Union[int, str, torch.device] = "xpu") -> int:
     default_generator = _get_generator(final_device)
     return default_generator.get_offset()
 
+def _is_xccl_available():
+    try:
+        from torch._C._distributed_c10d import ProcessGroupXCCL
+        return True
+    except ImportError:
+        return False
+
+_XCCL_AVAILABLE = _is_xccl_available()
+
+def _create_process_group_xccl(backend_opts, pg_opts):
+    if _XCCL_AVAILABLE:
+        from torch._C._distributed_c10d import ProcessGroupXCCL
+        return ProcessGroupXCCL(backend_opts.store, backend_opts.group_rank, backend_opts.group_size)
+    else:
+        return None
+
+def _init_xccl():
+    if _XCCL_AVAILABLE:
+        torch.distributed.Backend.register_backend(
+            "xccl",
+            _create_process_group_xccl,
+            devices=["xpu"],
+            extended_api=True
+        )
+
+_init_xccl()
+
 
 # import here to avoid circular import
 from .memory import (
