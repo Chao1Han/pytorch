@@ -30,6 +30,10 @@
 #include <torch/csrc/distributed/c10d/intra_node_comm.hpp>
 #endif
 
+#ifdef USE_C10D_XCCL
+#include <torch/csrc/distributed/c10d/ProcessGroupXCCL.hpp>
+#endif
+
 #ifdef USE_C10D_MPI
 #include <torch/csrc/distributed/c10d/ProcessGroupMPI.hpp>
 #endif
@@ -2943,6 +2947,23 @@ Example::
               py::arg("rank"),
               py::arg("size"),
               py::arg("timeout") = kProcessGroupDefaultTimeout,
+              py::call_guard<py::gil_scoped_release>());
+#endif
+
+#ifdef USE_C10D_XCCL
+  auto processGroupXCCL =
+      intrusive_ptr_no_gil_destructor_class_<::c10d::ProcessGroupXCCL>(
+          module, "ProcessGroupXCCL", backend)
+          .def(
+              py::init([](const c10::intrusive_ptr<::c10d::Store>& store,
+                          int rank,
+                          int size) {
+                return c10::make_intrusive<::c10d::ProcessGroupXCCL>(
+                    store, rank, size);
+              }),
+              py::arg("store"),
+              py::arg("rank"),
+              py::arg("size"),
               py::call_guard<py::gil_scoped_release>());
 #endif
 
