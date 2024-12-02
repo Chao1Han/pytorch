@@ -1456,10 +1456,6 @@ def _set_pg_timeout(timeout: timedelta, group: Optional[ProcessGroup] = None) ->
             backends.add(backend)  # type: ignore[arg-type]
         elif is_gloo_available() and isinstance(backend, ProcessGroupGloo):
             backends.add(backend)  # type: ignore[arg-type]
-    if torch.device("xpu") in devices and is_xccl_available():
-        backend = group._get_backend(torch.device("xpu"))
-        if isinstance(backend, ProcessGroupXCCL):
-            backends.add(backend)  # type: ignore[arg-type]
     if len(backends) == 0:
         warnings.warn("Set timeout is now only supported for either nccl or gloo.")
     for backend in backends:
