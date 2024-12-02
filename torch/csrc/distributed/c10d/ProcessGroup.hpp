@@ -641,7 +641,6 @@ class TORCH_API ProcessGroup : public torch::CustomClassHolder {
     // TODO: HACK for backend name to get sequence number for that backend.
     if (backendType == ProcessGroup::BackendType::GLOO ||
         backendType == ProcessGroup::BackendType::NCCL ||
-        backendType == ProcessGroup::BackendType::XCCL ||
         backendType == ProcessGroup::BackendType::UCC) {
       getDefaultBackend()->setSequenceNumberForGroup();
     } else {
@@ -663,7 +662,6 @@ class TORCH_API ProcessGroup : public torch::CustomClassHolder {
     // TODO: HACK for backend name to get sequence number for that backend.
     if (backendType == ProcessGroup::BackendType::GLOO ||
         backendType == ProcessGroup::BackendType::NCCL ||
-        backendType == ProcessGroup::BackendType::XCCL ||
         backendType == ProcessGroup::BackendType::UCC) {
       return getDefaultBackend()->getSequenceNumberForGroup();
     } else {

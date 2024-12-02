@@ -1104,6 +1104,7 @@ if(USE_XPU)
     message(WARNING "Failed to include ATen XPU implementation target")
   else()
     target_link_libraries(torch_xpu PRIVATE torch_xpu_ops)
+    # USE_C10D_XCCL from third_party torch-xpu-ops repository for xccl registration.
     if(USE_C10D_XCCL)
       target_compile_definitions(torch_xpu PUBLIC USE_C10D_XCCL)
     endif()

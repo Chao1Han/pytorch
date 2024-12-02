@@ -341,7 +341,7 @@ class Backend(str):
         Backend.backend_list.append(name.lower())
         if devices is not None:
             for device in devices:
-                if device != "cpu" and device != "cuda" and device != "xpu":
+                if device != "cpu" and device != "cuda":
                     Backend.default_device_backend_map[device] = name.lower()
         Backend.backend_type_map[name.lower()] = ProcessGroup.BackendType.CUSTOM
 
@@ -1495,7 +1495,7 @@ def init_process_group(
 
     Args:
         backend (str or Backend, optional): The backend to use. Depending on
-            build-time configurations, valid values include ``mpi``, ``gloo``, ``xccl``,
+            build-time configurations, valid values include ``mpi``, ``gloo``,
             ``nccl``, and ``ucc``. If the backend is not provided, then both a ``gloo``
             and ``nccl`` backend will be created, see notes below for how multiple
             backends are managed. This field can be given as a lowercase string
@@ -1775,9 +1775,10 @@ def _new_process_group_helper(
             "created, please use a different group name"
         )
 
-    if device_id is not None and device_id.index is None:
+    if device_id is not None and (device_id.index is None or device_id.type != "cuda"):
         raise ValueError(
-            "init_process_group device_id parameter must be a device with an index"
+            "init_process_group device_id parameter must be a cuda device with an "
+            "id, e.g. cuda:0, not just cuda or cpu"
         )
 
     # Note: _new_process_group_helper is only called from init_process_group, which always provides a timeout value
@@ -2729,6 +2730,7 @@ def all_reduce(tensor, op=ReduceOp.SUM, group=None, async_op=False):
         return work
     else:
         work.wait()
+
 
 @_exception_logger
 @deprecated(
@@ -4094,6 +4096,7 @@ def reduce_scatter_tensor(output, input, op=ReduceOp.SUM, group=None, async_op=F
         return work
     else:
         work.wait()
+
 
 @deprecated(
     "`torch.distributed._reduce_scatter_base` is a private function and will be deprecated. "
