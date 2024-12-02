@@ -687,4 +687,3 @@ class ProcessGroupXCCL(Backend):
         rank: int,
         size: int,
     ): ...
-    

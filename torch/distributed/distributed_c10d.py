@@ -354,7 +354,7 @@ class Backend(str):
                 "`cuda`. Please specify it via the `devices` argument of "
                 "`register_backend`."
             )
-            Backend.backend_capability[name.lower()] = ["cpu", "cuda", "xpu"]
+            Backend.backend_capability[name.lower()] = ["cpu", "cuda"]
         elif isinstance(devices, str):
             # Single device string specified. Simply convert to list.
             Backend.backend_capability[name.lower()] = [devices]
@@ -1910,10 +1910,6 @@ def _new_process_group_helper(
         elif backend_str == Backend.XCCL:
             if not is_xccl_available():
                 raise RuntimeError("Distributed package doesn't have XCCL built in")
-            if backend_options is not None:
-                assert isinstance(
-                    backend_options, ProcessGroupXCCL.Options
-                ), "Expected backend_options argument to be of type ProcessGroupXCCL.Options"
             backend_class = ProcessGroupXCCL(
                 backend_prefix_store, group_rank, group_size
             )
@@ -2726,7 +2722,7 @@ def all_reduce(tensor, op=ReduceOp.SUM, group=None, async_op=False):
             return _IllegalWork()
         else:
             return None
-        
+
     work = group.allreduce([tensor], opts)
 
     if async_op:
@@ -4091,7 +4087,7 @@ def reduce_scatter_tensor(output, input, op=ReduceOp.SUM, group=None, async_op=F
             return _IllegalWork()
         else:
             return None
-        
+
     work = group._reduce_scatter_base(output, input, opts)
 
     if async_op:
