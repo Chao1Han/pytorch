@@ -1278,7 +1278,7 @@ class DistributedTest:
             world_size = dist.get_world_size()
             rank_to_GPU = init_multigpu_helper(world_size, BACKEND)
             device_id = rank_to_GPU[rank][0]
-            torch.cuda.set_device(device_id)
+            torch.accelerator.set_device(device_id)
             num_colls = 2
             size_per_coll = 8
             small_tensors = [
@@ -1312,7 +1312,7 @@ class DistributedTest:
             world_size = dist.get_world_size()
             rank_to_GPU = init_multigpu_helper(world_size, BACKEND)
             device_id = rank_to_GPU[rank][0]
-            torch.cuda.set_device(device_id)
+            torch.accelerator.set_device(device_id)
             num_colls = 2
             size_per_coll = 8
             small_tensors = [
@@ -1345,7 +1345,7 @@ class DistributedTest:
             world_size = dist.get_world_size()
             rank_to_GPU = init_multigpu_helper(world_size, BACKEND)
             device_id = rank_to_GPU[rank][0]
-            torch.cuda.set_device(device_id)
+            torch.accelerator.set_device(device_id)
             p2p_op_list = []
             recv_tensors = [None for _ in range(world_size)]
             expected_tensors = [None for _ in range(world_size)]
@@ -1385,7 +1385,7 @@ class DistributedTest:
             world_size = dist.get_world_size()
             rank_to_GPU = init_multigpu_helper(world_size, BACKEND)
             device_id = rank_to_GPU[rank][0]
-            torch.cuda.set_device(device_id)
+            torch.accelerator.set_device(device_id)
 
             send_tensor = _build_tensor(world_size, device_id=device_id)
             recv_tensor = _build_tensor(world_size, value=-1, device_id=device_id)
@@ -1438,7 +1438,7 @@ class DistributedTest:
             rank = dist.get_rank()
             rank_to_GPU = init_multigpu_helper(dist.get_world_size(), BACKEND)
             device_id = rank_to_GPU[rank][0]
-            torch.cuda.set_device(device_id)
+            torch.accelerator.set_device(device_id)
             p2p_op_list = []
 
             if rank == 1:
@@ -1559,7 +1559,7 @@ class DistributedTest:
             world_size = dist.get_world_size()
             rank_to_GPU = init_multigpu_helper(world_size, BACKEND)
             device_id = rank_to_GPU[rank][0]
-            torch.cuda.set_device(device_id)
+            torch.accelerator.set_device(device_id)
 
             tensor = _build_tensor(rank + 1, device_id=device_id)
             profiler_cls = profiler_ctx if profiler_ctx is not None else nullcontext()
@@ -2046,7 +2046,7 @@ class DistributedTest:
             group, group_id, rank = self._init_global_test()
             rank_to_GPU = init_multigpu_helper(dist.get_world_size(), BACKEND)
             device_id = rank_to_GPU[rank][0]
-            torch.cuda.set_device(device_id)
+            torch.accelerator.set_device(device_id)
             self._test_broadcast_helper(group, group_id, rank, True, rank_to_GPU)
 
         @skip_if_small_worldsize
@@ -2073,7 +2073,7 @@ class DistributedTest:
             group, _, rank = self._init_global_test()
             rank_to_GPU = init_multigpu_helper(dist.get_world_size(), BACKEND)
             device_id = rank_to_GPU[rank][0]
-            torch.cuda.set_device(device_id)
+            torch.accelerator.set_device(device_id)
 
             new_port = str(MASTER_PORT + 1)
             os.environ["MASTER_PORT"] = new_port
@@ -2152,7 +2152,7 @@ class DistributedTest:
             group, group_id, rank = self._init_global_test()
             rank_to_GPU = init_multigpu_helper(dist.get_world_size(), BACKEND)
             device_id = rank_to_GPU[rank][0]
-            torch.cuda.set_device(device_id)
+            torch.accelerator.set_device(device_id)
             self._test_reduce_helper(
                 group,
                 group_id,

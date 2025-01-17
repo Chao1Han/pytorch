@@ -321,7 +321,12 @@ class DTensorTestBase(MultiProcessTestCase):
 
     @property
     def backend(self) -> str:
-        backend = "nccl" if TEST_CUDA else "hccl" if TEST_HPU else "gloo"
+        if TEST_CUDA:
+            backend = "nccl"
+        elif TEST_HPU:
+            backend = "hccl"
+        else:
+            backend = "gloo"
         return backend
 
     def build_device_mesh(self) -> DeviceMesh:
@@ -331,13 +336,13 @@ class DTensorTestBase(MultiProcessTestCase):
         if "nccl" in self.backend and torch.cuda.device_count() < self.world_size:
             sys.exit(TEST_SKIPS[f"multi-gpu-{self.world_size}"].exit_code)
 
-        if self.backend not in ["nccl", "gloo", "mpi", "cpu:gloo,cuda:nccl", "hccl"]:
+        if self.backend not in ["nccl", "gloo", "mpi", "cpu:gloo,cuda:nccl", "hccl", "xccl"]:
             raise RuntimeError(f"Backend {self.backend} not supported!")
 
         device_id = None
-        if "nccl" in self.backend:
+        if "nccl" or "xccl" in self.backend:
             # set device for nccl pg for collectives
-            torch.cuda.set_device(self.rank)
+            torch.accelerator.set_device(self.rank)
             # we only need to set device_id for nccl backend with eager init
             device_id = torch.device(f"{self.device_type}:{self.rank}") if eager_init else None
         # For nccl backend, bind the device to the process if device_id is not None

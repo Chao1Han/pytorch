@@ -106,6 +106,8 @@ class DistTestCases:
     backend_feature["plugin"] = set()
     if TEST_HPU:
         backend_feature["hpu"] = {"hccl"}
+    if TEST_XPU:
+        backend_feature["xpu"] = {"xccl"}
 
 
 def skip_if_no_gpu(func):
@@ -121,6 +123,8 @@ def skip_if_no_gpu(func):
             sys.exit(TEST_SKIPS[f"multi-gpu-{world_size}"].exit_code)
         if TEST_HPU and torch.hpu.device_count < world_size:
             sys.exit(TEST_SKIPS[f"multi-gpu-{world_size}"].exit_code)
+        if TEST_XPU and torch.xpu.device_count < world_size:
+            sys.exit(TEST_SKIPS[f"multi-xpu-{world_size}"].exit_code)
 
         return func(*args, **kwargs)
 
@@ -957,8 +961,8 @@ class DistributedTestBase(MultiProcessTestCase):
             rank=self.rank,
             store=store
         )
-        if "nccl" in self.backend(device):
-            torch.cuda.set_device(self.rank)
+        if "nccl" or "xccl" in self.backend(device):
+            torch.accelerator.set_device(self.rank)
         return torch.distributed.distributed_c10d._get_default_group()
 
     def rank_to_device(self, device):
@@ -1351,7 +1355,7 @@ def _dynamo_dist_per_rank_init(rank, world_size, init_pg=True, fake_pg=False):
     # To avoid multiple inheritance from _dynamo.test_case.TestCase and MultiProcessTestCase,
     # Just manually implement the most important part of the dynamo behavior to reset/clear.
     if not fake_pg:
-        torch.cuda.set_device(rank)
+        torch.accelerator.set_device(rank)
     os.environ['MASTER_ADDR'] = 'localhost'
     os.environ['MASTER_PORT'] = '6789'
     if init_pg:
