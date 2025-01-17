@@ -287,7 +287,7 @@ class TestFSDPWithDeviceMeshAndDTensor(DTensorTestBase):
 
 devices = ("cuda", "hpu", "xpu")
 instantiate_device_type_tests(
-    TestFSDPWithDeviceMeshAndDTensor, globals(), only_for=devices
+    TestFSDPWithDeviceMeshAndDTensor, globals(), only_for=devices, allow_xpu=True
 )
 if __name__ == "__main__":
     run_tests()

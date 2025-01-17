@@ -258,7 +258,7 @@ class TestForwardOverlapWorldSizeTwo(TestForwardOverlapWorldSizeOne):
 
 devices = ("cuda", "hpu", "xpu")
 instantiate_device_type_tests(
-    TestForwardOverlapWorldSizeOne, globals(), only_for=devices
+    TestForwardOverlapWorldSizeOne, globals(), only_for=devices, allow_xpu=True
 )
 if __name__ == "__main__":
     run_tests()

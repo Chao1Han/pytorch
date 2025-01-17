@@ -71,6 +71,6 @@ class TestInput(FSDPTest):
 
 
 devices = ("cuda", "hpu", "xpu")
-instantiate_device_type_tests(TestInput, globals(), only_for=devices)
+instantiate_device_type_tests(TestInput, globals(), only_for=devices, allow_xpu=True)
 if __name__ == "__main__":
     run_tests()

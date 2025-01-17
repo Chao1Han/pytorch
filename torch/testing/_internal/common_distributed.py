@@ -44,6 +44,7 @@ from torch.testing._internal.common_utils import (
     TestCase,
     run_tests,
     TEST_HPU,
+    TEST_XPU,
 )
 from torch.testing._internal.distributed.multi_threaded_pg import (
     _install_threaded_pg,
@@ -198,6 +199,8 @@ def skip_if_lt_x_gpu(x):
             if torch.cuda.is_available() and torch.cuda.device_count() >= x:
                 return func(*args, **kwargs)
             if TEST_HPU and torch.hpu.device_count() >= x:
+                return func(*args, **kwargs)
+            if TEST_XPU and torch.xpu.device_count() >= x:
                 return func(*args, **kwargs)
             sys.exit(TEST_SKIPS[f"multi-gpu-{x}"].exit_code)
 
@@ -510,7 +513,8 @@ def init_multigpu_helper(world_size: int, backend: str):
     nGPUs = torch.cuda.device_count()
     if TEST_HPU:
         nGPUs = torch.hpu.device_count()
-
+    if TEST_XPU:
+        nGPUs = torch.xpu.device_count()
     visible_devices = range(nGPUs)
 
     # If rank is less than or equal to number of available GPU's
