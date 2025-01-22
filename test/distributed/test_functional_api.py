@@ -34,6 +34,7 @@ from torch.testing._internal.common_utils import (
     skipIfHpu,
     TEST_CUDA,
     TEST_HPU,
+    TEST_XPU,
     TestCase,
 )
 
@@ -66,6 +67,9 @@ if TEST_HPU:
     DEVICE = "hpu"
 elif TEST_CUDA:
     devices.append("cuda")
+elif TEST_XPU:
+    devices.append("xpu")
+    DEVICE = "xpu"
 
 
 def new_subgroups(group_size: int, pg_tag=None):
@@ -474,6 +478,8 @@ BACKEND = dist.Backend.NCCL if torch.cuda.is_available() else dist.Backend.GLOO
 # And then set the BACKEND variable appropriately.
 if TEST_HPU:
     BACKEND = dist.Backend.HCCL
+elif TEST_XPU:
+    BACKEND = dist.Backend.XCCL
 
 
 # allows you to check for multiple accelerator irrespective of device type
@@ -485,6 +491,9 @@ def exit_if_lt_x_accelerators(x):
             sys.exit(TEST_SKIPS[f"multi-gpu-{x}"].exit_code)
     elif TEST_HPU:
         if torch.hpu.device_count() < x:
+            sys.exit(TEST_SKIPS[f"multi-hpu-{x}"].exit_code)
+    elif TEST_XPU:
+        if torch.xpu.device_count() < x:
             sys.exit(TEST_SKIPS[f"multi-hpu-{x}"].exit_code)
 
 

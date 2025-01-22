@@ -43,6 +43,7 @@ from torch.testing._internal.common_utils import (
     skipIfTorchDynamo,
     TEST_CUDA,
     TEST_HPU,
+    TEST_XPU,
 )
 from torch.testing._internal.distributed._tensor.common_dtensor import (
     DTensorTestBase,
@@ -108,7 +109,14 @@ class TestDTensorCompile(torch._dynamo.test_case.TestCase):
 
     @property
     def device_type(self) -> str:
-        return "cuda" if TEST_CUDA else "hpu" if TEST_HPU else "cpu"
+        if TEST_CUDA:
+            return "cuda"
+        elif TEST_HPU:
+            return "hpu"
+        elif TEST_XPU:
+            return "xpu"
+        else:
+            return "xpu"
 
     @property
     def world_size(self) -> int:

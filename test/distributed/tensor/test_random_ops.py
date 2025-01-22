@@ -19,7 +19,7 @@ from torch.distributed.tensor._random import (
 )
 from torch.distributed.tensor.debug import CommDebugMode
 from torch.distributed.tensor.parallel import ColwiseParallel, parallelize_module
-from torch.testing._internal.common_utils import run_tests, TEST_HPU
+from torch.testing._internal.common_utils import run_tests, TEST_HPU, TEST_XPU
 from torch.testing._internal.distributed._tensor.common_dtensor import (
     DTensorTestBase,
     skip_if_lt_x_gpu,
@@ -27,8 +27,12 @@ from torch.testing._internal.distributed._tensor.common_dtensor import (
     with_comms,
 )
 
-
-TYPE_DEVICE = "hpu" if TEST_HPU else "cuda"
+if TEST_XPU:
+    TYPE_DEVICE = "xpu"
+elif TEST_HPU:
+    TYPE_DEVICE = "hpu"
+else:
+    TYPE_DEVICE = "cuda"
 
 
 class DistTensorRandomInitTest(DTensorTestBase):

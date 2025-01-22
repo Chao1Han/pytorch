@@ -382,7 +382,7 @@ class TestExplicitUnshard(FSDPTest):
             model.module.mlps._wait_unshard_streams_on_current_stream()
 
 
-devices = ("cuda", "hpu")
+devices = ("cuda", "hpu", "xpu")
 instantiate_device_type_tests(TestCommunication, globals(), only_for=devices)
 instantiate_device_type_tests(TestExplicitUnshard, globals(), only_for=devices)
 if __name__ == "__main__":
