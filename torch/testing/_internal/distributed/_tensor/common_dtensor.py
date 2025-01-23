@@ -32,6 +32,7 @@ from torch.distributed.tensor.parallel import (
 from torch.testing._internal.common_utils import (
     TEST_HPU,
     TEST_CUDA,
+    TEST_XPU
 )
 from torch.testing._internal.common_distributed import (
     MultiProcessTestCase,
@@ -52,6 +53,10 @@ elif TEST_HPU:
     DEVICE_TYPE = "hpu"
     PG_BACKEND = "hccl"
     DEVICE_COUNT = _get_device_module("hpu").device_count()
+elif TEST_XPU:
+    DEVICE_TYPE = "xpu"
+    PG_BACKEND = "xccl"
+    DEVICE_COUNT = _get_device_module("xpu").device_count()
 else:
     DEVICE_TYPE = "cpu"
     PG_BACKEND = "gloo"
@@ -325,6 +330,8 @@ class DTensorTestBase(MultiProcessTestCase):
             backend = "nccl"
         elif TEST_HPU:
             backend = "hccl"
+        elif TEST_XPU:
+            backend = "xccl"
         else:
             backend = "gloo"
         return backend
@@ -396,10 +403,10 @@ def with_comms(eager_init: Union[TestFunc, bool] = False) -> TestFunc:
             self, *args: tuple[object], **kwargs: dict[str, Any]  # type: ignore[misc]
         ) -> None:
             # if enough GPU we can use GPU, otherwise we fallback to CPU
-            if not TEST_CUDA or torch.cuda.device_count() < self.world_size:
-                self.device_type = "cpu"
-            else:
-                self.device_type = DEVICE_TYPE
+            # if not TEST_CUDA or torch.cuda.device_count() < self.world_size:
+            #     self.device_type = "cpu"
+            # else:
+            self.device_type = DEVICE_TYPE  #zl_debug need to refine
 
             self.init_pg(eager_init)
 
