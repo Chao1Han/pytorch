@@ -1215,7 +1215,7 @@ class FSDPTest(MultiProcessTestCase):
         device_ids = None
         device_id = self.rank % DEVICE_COUNT
         if TEST_CUDA or TEST_XPU:
-            torch.accelerator.set_device(device_id)
+            torch.accelerator.set_device_index(device_id)
         device_ids = [device_id]
 
         # Execute barrier prior to running test to ensure that every process

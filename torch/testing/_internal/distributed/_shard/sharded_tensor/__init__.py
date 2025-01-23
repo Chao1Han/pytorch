@@ -32,7 +32,7 @@ class ShardedTensorTestBase(MultiProcessTestCase):
 
         # set device for nccl pg for collectives
         if backend == "nccl" or backend == "xccl":
-            torch.accelerator.set_device(self.rank)
+            torch.accelerator.set_device_index(self.rank)
 
 
     def init_rpc(self):

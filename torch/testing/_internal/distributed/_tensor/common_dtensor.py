@@ -342,7 +342,7 @@ class DTensorTestBase(MultiProcessTestCase):
         device_id = None
         if "nccl" or "xccl" in self.backend:
             # set device for nccl pg for collectives
-            torch.accelerator.set_device(self.rank)
+            torch.accelerator.set_device_index(self.rank)
             # we only need to set device_id for nccl backend with eager init
             device_id = torch.device(f"{self.device_type}:{self.rank}") if eager_init else None
         # For nccl backend, bind the device to the process if device_id is not None
