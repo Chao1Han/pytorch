@@ -13,7 +13,7 @@ if not dist.is_available():
     sys.exit(0)
 
 from torch.testing._internal.common_distributed import MultiProcessTestCase, TEST_SKIPS
-from torch.testing._internal.common_utils import run_tests, TEST_WITH_DEV_DBG_ASAN
+from torch.testing._internal.common_utils import run_tests, TEST_WITH_DEV_DBG_ASAN, TEST_CUDA, TEST_XPU
 
 
 if TEST_WITH_DEV_DBG_ASAN:
@@ -23,7 +23,12 @@ if TEST_WITH_DEV_DBG_ASAN:
     )
     sys.exit(0)
 
-BACKEND = dist.Backend.NCCL if torch.cuda.is_available() else dist.Backend.GLOO
+if TEST_CUDA:
+    BACKEND = dist.Backend.NCCL
+elif TEST_XPU:
+    BACKEND = dist.Backend.XCCL
+else:
+    BACKEND = dist.Backend.GLOO
 
 
 def with_comms(func=None):
@@ -34,7 +39,7 @@ def with_comms(func=None):
 
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        if BACKEND == dist.Backend.NCCL and torch.cuda.device_count() < self.world_size:
+        if (BACKEND == dist.Backend.NCCL or BACKEND == dist.Backend.XCCL) and torch.accelerator.device_count() < self.world_size:
             sys.exit(TEST_SKIPS[f"multi-gpu-{self.world_size}"].exit_code)
         self.dist_init()
         func(self)
@@ -53,15 +58,15 @@ class TestObjectCollectives(MultiProcessTestCase):
     @property
     def device(self):
         return (
-            torch.device("cuda", self.rank % torch.cuda.device_count())
-            if BACKEND == dist.Backend.NCCL
+            torch.device(self.rank % torch.accelerator.device_count())
+            if (BACKEND == dist.Backend.NCCL or BACKEND == dist.Backend.XCCL)
             else torch.device("cpu")
         )
 
     @property
     def world_size(self):
-        if BACKEND == dist.Backend.NCCL:
-            return torch.cuda.device_count()
+        if (BACKEND == dist.Backend.NCCL or BACKEND == dist.Backend.XCCL):
+            return torch.accelerator.device_count()
         return super().world_size
 
     @property
@@ -82,8 +87,8 @@ class TestObjectCollectives(MultiProcessTestCase):
         )
 
         # set device for nccl pg for collectives
-        if BACKEND == "nccl":
-            torch.cuda.set_device(self.rank)
+        if BACKEND in ["nccl", "xccl"]:
+            torch.accelerator.set_device(self.rank)
 
     @with_comms()
     def test_all_gather_object(self):
@@ -175,6 +180,7 @@ class TestObjectCollectives(MultiProcessTestCase):
         dist.broadcast_object_list(out_list, src=ranks[0], group=my_pg)
         self.assertEqual(ranks[0], out_list[0])
 
-
+devices = ("cuda", "cpu", "xpu")
+instantiate_device_type_tests(TestObjectCollectives, globals(), only_for=devices, allow_xpu=True)
 if __name__ == "__main__":
     run_tests()

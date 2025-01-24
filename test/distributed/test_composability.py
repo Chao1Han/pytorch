@@ -32,6 +32,8 @@ from torch.testing._internal.common_utils import (
     parametrize,
     skip_but_pass_in_sandcastle_if,
     TEST_WITH_ROCM,
+    TEST_CUDA,
+    TEST_XPU,
 )
 
 
@@ -97,7 +99,9 @@ class ComposabilityTest(MultiProcContinousTest):
     @classmethod
     def backend_str(cls) -> str:
         # Testing with NCCL backend
-        return "nccl"
+    if TEST_XPU:
+        return "xccl"
+    return "nccl"
 
     @classmethod
     def setUpClass(cls):
@@ -106,13 +110,13 @@ class ComposabilityTest(MultiProcContinousTest):
         Set up the device.
         """
         super().setUpClass()
-        dev_id = cls.rank % torch.cuda.device_count()
-        cls.device = torch.device(f"cuda:{dev_id}")
-        torch.cuda.set_device(cls.device)
+        dev_id = cls.rank % torch.accelerator.device_count()
+        torch.accelerator.set_device_index(dev_id)
 
     def _build_mesh(self, mesh_shape=(2, 2), mesh_dim_names=("dp", "pp")):
+        device = "xpu" if TEST_XPU else "cuda"
         device_mesh = init_device_mesh(
-            "cuda", mesh_shape=mesh_shape, mesh_dim_names=mesh_dim_names
+            device, mesh_shape=mesh_shape, mesh_dim_names=mesh_dim_names
         )
         return device_mesh
 
@@ -384,11 +388,11 @@ if __name__ == "__main__":
     # Check if GPU and NCCL are available
     if not (
         dist.is_available()
-        and dist.is_nccl_available()
-        and torch.cuda.device_count() > 1
+        and (dist.is_nccl_available() or dist.is_xccl_available())
+        and torch.accelerator.device_count() > 1
     ):
         print(
-            "c10d NCCL not available or not enough GPUs, skipping tests",
+            "c10d NCCL/XCCL not available or not enough GPUs, skipping tests",
             file=sys.stderr,
         )
         sys.exit(0)

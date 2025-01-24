@@ -23,6 +23,8 @@ class TestMiscCollectiveUtils(TestCase):
             assert dist.get_default_backend_for_device(device) == "gloo"
         elif "hpu" in device:
             assert dist.get_default_backend_for_device(device) == "hccl"
+        elif "xpu" in device:
+            assert dist.get_default_backend_for_device(device) == "xccl"
         else:
             with self.assertRaises(ValueError):
                 dist.get_default_backend_for_device(device)
@@ -45,7 +47,7 @@ class TestMiscCollectiveUtils(TestCase):
 
 
 devices = ["cpu", "cuda", "hpu", "xpu"]
-instantiate_device_type_tests(TestMiscCollectiveUtils, globals(), only_for=devices)
+instantiate_device_type_tests(TestMiscCollectiveUtils, globals(), only_for=devices, allow_xpu=True)
 
 if __name__ == "__main__":
     run_tests()
