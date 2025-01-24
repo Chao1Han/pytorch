@@ -13,11 +13,12 @@ from torch.cuda import Event
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.testing._internal.common_device_type import instantiate_device_type_tests
 from torch.testing._internal.common_distributed import skip_if_lt_x_gpu
-from torch.testing._internal.common_fsdp import FSDPTest
+from torch.testing._internal.common_fsdp import FSDPTest, get_devtype
 from torch.testing._internal.common_utils import (
     get_cycles_per_ms,
     run_tests,
     TEST_HPU,
+    TEST_XPU,
     TEST_WITH_DEV_DBG_ASAN,
 )
 
@@ -33,6 +34,7 @@ if TEST_WITH_DEV_DBG_ASAN:
     )
     sys.exit(0)
 
+device_type = torch.device(get_devtype())
 
 class Layer(nn.Module):
     def __init__(self, compute_cycles, has_params: bool):

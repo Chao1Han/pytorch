@@ -559,13 +559,13 @@ class TestDTensorCompile(torch._dynamo.test_case.TestCase):
             out = layer_norm.permute(0, 2, 1)
             return out
 
-        x = torch.randn(4, 2, 4, requires_grad=True, device="cuda")
+        x = torch.randn(4, 2, 4, requires_grad=True, device="xpu")
         x_dt = DTensor.from_local(x, mesh, [Shard(1)], run_check=False)
 
-        y = torch.randn(4, requires_grad=True, device="cuda")
+        y = torch.randn(4, requires_grad=True, device="xpu")
         y_dt = DTensor.from_local(y, mesh, [Replicate()], run_check=False)
 
-        z = torch.randn(4, requires_grad=True, device="cuda")
+        z = torch.randn(4, requires_grad=True, device="xpu")
         z_dt = DTensor.from_local(z, mesh, [Replicate()], run_check=False)
 
         opt_fn = torch.compile(fn, backend="inductor", fullgraph=True)
@@ -662,7 +662,7 @@ class TestDTensorCompile(torch._dynamo.test_case.TestCase):
         # pass in tensor as inputs/outputs, create DTensor and run redistribute
         # (allgather collective) inside the fn
         def fn(x_dt):
-            if x_dt.device_mesh.device_type == "cuda":
+            if x_dt.device_mesh.device_type == "xpu":
                 return x_dt + 1
             else:
                 return x_dt + 2
@@ -795,7 +795,7 @@ def forward(self, primals_1):
 
         model = FakeTransformer().to(self.device_type)
 
-        tp_mesh = init_device_mesh("cuda", (2,), mesh_dim_names=("tp",))
+        tp_mesh = init_device_mesh("xpu", (2,), mesh_dim_names=("tp",))
 
         # apply sequence parallel
         parallel_plan = {
@@ -906,7 +906,7 @@ class TestDTensorCompileE2E(DTensorTestBase):
 
         # 2-D mesh is [dp, tp]
         twod_mesh = init_device_mesh(
-            "cuda",
+            "xpu",
             (data_parallel_size, self.world_size // data_parallel_size),
             mesh_dim_names=["dp", "tp"],
         )
@@ -956,7 +956,7 @@ class TestDTensorCompileE2E(DTensorTestBase):
 
         # 2-D mesh is [dp, tp]
         mesh_2d = init_device_mesh(
-            "cuda", mesh_shape=(dp_degree, tp_degree), mesh_dim_names=("dp", "tp")
+            "xpu", mesh_shape=(dp_degree, tp_degree), mesh_dim_names=("dp", "tp")
         )
 
         inp = torch.rand(20, 10, device=self.device_type)
@@ -1000,7 +1000,7 @@ class TestDTensorCompileE2E(DTensorTestBase):
     @with_comms
     @skip_if_lt_x_gpu(4)
     def test_compile_dtensor_redistribute_backward(self):
-        mesh = DeviceMesh(device_type="cuda", mesh=torch.arange(self.world_size))
+        mesh = DeviceMesh(device_type="xpu", mesh=torch.arange(self.world_size))
 
         def fn(x, y):
             dt = DTensor.from_local(x.reshape(2, 4), mesh, [Shard(0)], run_check=False)

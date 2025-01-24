@@ -64,7 +64,7 @@ class MicroPipelineTPTest(TestCase):
 
         self.rank = 0
         self.world_size = 2
-        torch.cuda.set_device("cuda:0")
+        torch.xpu.set_device("xpu:0")
 
         store = FakeStore()
         dist.init_process_group(
@@ -299,8 +299,8 @@ class MicroPipelineTPTest(TestCase):
             self.assertIn("fused_all_gather_scaled_matmul", str(gm.graph))
             self.assertNotIn("all_gather_into_tensor", str(gm.graph))
 
-        if torch.cuda.get_device_capability() < (8, 9):
-            return
+        # if torch.cuda.get_device_capability() < (8, 9):
+        #     return
 
         with _test_mode():
             compiled = torch.compile(func)
@@ -386,8 +386,8 @@ class MicroPipelineTPTest(TestCase):
         self.assertIn("fused_scaled_matmul_reduce_scatter", str(gm.graph))
         self.assertNotIn("reduce_scatter_tensor", str(gm.graph))
 
-        if torch.cuda.get_device_capability() < (8, 9):
-            return
+        # if torch.cuda.get_device_capability() < (8, 9):
+        #     return
 
         with _test_mode():
             compiled = torch.compile(func)

@@ -409,13 +409,14 @@ class DistMatrixOpsTest(DTensorTestBase):
         #       Gaps include missing op support for aten.masked_fill_.Scalar.
         is_causal = True
         enable_gqa = False
-        params = torch.backends.cuda.SDPAParams(
-            query, key, value, None, dropout_p, is_causal, enable_gqa
-        )
-        if torch.backends.cuda.can_use_flash_attention(params, debug=False):
-            available_backends.append(SDPBackend.FLASH_ATTENTION)
-        if torch.backends.cuda.can_use_efficient_attention(params, debug=False):
-            available_backends.append(SDPBackend.EFFICIENT_ATTENTION)
+        if torch.cuda.is_available():
+            params = torch.backends.cuda.SDPAParams(
+                query, key, value, None, dropout_p, is_causal, enable_gqa
+            )
+            if torch.backends.cuda.can_use_flash_attention(params, debug=False):
+                available_backends.append(SDPBackend.FLASH_ATTENTION)
+            if torch.backends.cuda.can_use_efficient_attention(params, debug=False):
+                available_backends.append(SDPBackend.EFFICIENT_ATTENTION)
 
         for backend in available_backends:
             with sdpa_kernel(backends=[backend]):
