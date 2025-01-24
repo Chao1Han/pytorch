@@ -25,10 +25,14 @@ from torch.testing._internal.common_distributed import (
 from torch.testing._internal.common_utils import (  # type: ignore[attr-defined]
     run_tests,
     TestCase,
+    TEST_XPU,
 )
 from torch.testing._internal.distributed.fake_pg import FakeStore
 from torch.testing._internal.inductor_utils import HAS_GPU
+from torch.testing._internal.common_fsdp import get_devtype
+from torch.testing._internal.common_device_type import instantiate_device_type_tests
 
+device_type = torch.device(get_devtype())
 
 def load_test_module(name):
     import sys
@@ -69,17 +73,18 @@ class TestWithNCCL(MultiProcessTestCase):
 
     @property
     def device(self) -> torch.device:
-        return torch.device(f"cuda:{self.rank}")
+        return torch.device(self.rank)
 
     def _init_process_group(self) -> None:
         # Allow testing aoti after torch.compile
         torch._inductor.config.triton.store_cubin = True
         torch._inductor.config.debug = True
 
-        torch.cuda.set_device(self.device)
+        torch.accelerator.set_device_index(self.rank)
         store = dist.FileStore(self.file_name, self.world_size)
+        backend = "xccl" if TEST_XPU else "nccl"
         dist.init_process_group(
-            backend="nccl",
+            backend=backend,
             world_size=self.world_size,
             rank=self.rank,
             store=store,
@@ -249,7 +254,7 @@ class TestWithNCCL(MultiProcessTestCase):
         )
         # check memory leak
         for i in range(1, 10):
-            mem_usage[i] = torch.cuda.max_memory_allocated()
+            mem_usage[i] = torch.accelerator.max_memory_allocated()
             compiled(arg)
 
         assert mem_usage[9] == mem_usage[8]
@@ -346,14 +351,14 @@ class TestWithNCCL(MultiProcessTestCase):
     @skip_if_lt_x_gpu(2)
     def test_all_to_all_single(self) -> None:
         self._init_process_group()
-        torch.cuda.set_device(self.device)
+        torch.accelerator.set_device_index(self.rank)
 
         torch.manual_seed(42)
         send_sz_matrix = torch.randint(0, 20, (self.world_size, self.world_size))
 
         input_split_sizes = send_sz_matrix[self.rank].tolist()
         output_split_sizes = send_sz_matrix[:, self.rank].tolist()
-        input = torch.full((sum(input_split_sizes),), float(self.rank)).cuda()
+        input = torch.full((sum(input_split_sizes),), float(self.rank)).to(device_type.type)
 
         output = torch.ops._c10d_functional.all_to_all_single(
             input,
@@ -364,7 +369,7 @@ class TestWithNCCL(MultiProcessTestCase):
         output = torch.ops._c10d_functional.wait_tensor(output)
         expect = torch.cat(
             [
-                torch.full((sz,), float(rank)).cuda()
+                torch.full((sz,), float(rank)).to(device_type.type)
                 for rank, sz in enumerate(output_split_sizes)
             ]
         )
@@ -456,7 +461,7 @@ class TestWithNCCL(MultiProcessTestCase):
     @fresh_inductor_cache()
     def test_threading(self):
         self._init_process_group()
-        device = torch.device(f"cuda:{self.rank}")
+        device = torch.device(self.rank)
 
         def func(arg: torch.Tensor) -> torch.Tensor:
             buf0 = arg + 42
@@ -515,6 +520,9 @@ class CompileTest(TestCase):
     def tearDown(self):
         dist.destroy_process_group()
 
+    @unittest.skipIf(
+        TEST_XPU, "XPU doesn't test inductor case, skipping"
+    )
     @unittest.skipIf(not HAS_GPU, "Inductor+gpu needs triton and recent GPU arch")
     @fresh_inductor_cache()
     def test_inductor_all_reduce_single(self):
@@ -552,6 +560,9 @@ class CompileTest(TestCase):
         AOTIRunnerUtil.run("cuda", func, (arg,))
         torch.cuda.synchronize()
 
+    @unittest.skipIf(
+        TEST_XPU, "XPU doesn't test inductor case, skipping"
+    )
     @unittest.skipIf(not HAS_GPU, "Inductor+gpu needs triton and recent GPU arch")
     @fresh_inductor_cache()
     def test_inductor_all_reduce_coalesced(self):
@@ -598,6 +609,9 @@ class CompileTest(TestCase):
         out = AOTIRunnerUtil.run("cuda", func, (args,))  # noqa: F841
         torch.cuda.synchronize()
 
+    @unittest.skipIf(
+        TEST_XPU, "XPU doesn't test inductor case, skipping"
+    )
     @unittest.skipIf(not HAS_GPU, "Inductor+gpu needs triton and recent GPU arch")
     @fresh_inductor_cache()
     def test_inductor_inplace_op_on_view(self):
@@ -932,5 +946,7 @@ class CompileTest(TestCase):
         (FileCheck().check("all_reduce_.default(buf0, 'avg', '0')").run(code))
 
 
+devices = ("cuda", "xpu")
+instantiate_device_type_tests(TestWithNCCL, globals(), only_for=devices, allow_xpu=True)
 if __name__ == "__main__":
     run_tests()

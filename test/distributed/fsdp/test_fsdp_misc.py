@@ -93,9 +93,9 @@ class TestFSDPMiscMultiProcess(FSDPTest):
           without specifying a device ID (i.e. ``torch.device("cuda")``) warns
         """
         dev_id = (
-            torch.cuda.current_device()
+            torch.xpu.current_device()
             if use_index
-            else torch.device("cuda", torch.cuda.current_device())
+            else torch.device("xpu", torch.xpu.current_device())
         )
 
         def _check_device_matches(module, device_id):
@@ -108,7 +108,7 @@ class TestFSDPMiscMultiProcess(FSDPTest):
             self.assertEqual(1, len(devices))
             found_device = devices.pop()
             if use_index and not isinstance(device_id, torch.device):
-                device = torch.device("cuda", device_id)
+                device = torch.device("xpu", device_id)
             else:
                 device = device_id
             self.assertEqual(found_device, device)
@@ -140,10 +140,10 @@ class TestFSDPMiscMultiProcess(FSDPTest):
                 self.process_group,
                 FSDPInitMode.RECURSIVE,
                 DEVICEInitMode.DEVICE_BEFORE,
-                fsdp_kwargs={"device_id": torch.device("cuda")},
+                fsdp_kwargs={"device_id": torch.device("xpu")},
             )
         _check_device_matches(
-            nested_wrapped_module, torch.device("cuda", torch.cuda.current_device())
+            nested_wrapped_module, torch.device("xpu", torch.xpu.current_device())
         )
 
     @skip_if_lt_x_gpu(2)
@@ -178,8 +178,8 @@ class TestFSDPMiscMultiProcess(FSDPTest):
                 loss = torch.nn.functional.cross_entropy(output, y)
                 return loss
 
-        model = Mnist().cuda()
-        model1 = Mnist().cuda()
+        model = Mnist().xpu()
+        model1 = Mnist().xpu()
         model1.load_state_dict(model.state_dict())
         fsdp_model = FSDP(
             model,
@@ -197,17 +197,17 @@ class TestFSDPMiscMultiProcess(FSDPTest):
 
         seed = self.rank + 20231010
         torch.manual_seed(seed)
-        torch.cuda.manual_seed(seed)
+        torch.xpu.manual_seed(seed)
 
         losses = []
         grads = []
         for i in range(5):
-            x = torch.randn(8, 1, 28, 28, device="cuda").requires_grad_()
-            y = torch.randint(low=0, high=9, size=(8,), device="cuda")
+            x = torch.randn(8, 1, 28, 28, device="xpu").requires_grad_()
+            y = torch.randint(low=0, high=9, size=(8,), device="xpu")
             for model, opt in ((fsdp_model, fsdp_opt), (ddp_model, ddp_opt)):
                 seed = self.rank + i
                 torch.manual_seed(seed)
-                torch.cuda.manual_seed(seed)
+                torch.xpu.manual_seed(seed)
                 loss = model(x, y).sum()
                 losses.append(loss)
                 loss.backward()
@@ -223,8 +223,8 @@ class TestFSDPMiscMultiProcess(FSDPTest):
             fsdp_model.eval()
             ddp_model.eval()
             for _ in range(5):
-                x = torch.randn(8, 1, 28, 28, device="cuda").requires_grad_()
-                y = torch.randint(low=0, high=9, size=(8,), device="cuda")
+                x = torch.randn(8, 1, 28, 28, device="xpu").requires_grad_()
+                y = torch.randint(low=0, high=9, size=(8,), device="xpu")
                 fsdp_loss = fsdp_model(x, y)
                 ddp_loss = ddp_model(x, y)
                 assert torch.allclose(fsdp_loss, ddp_loss)
@@ -232,12 +232,12 @@ class TestFSDPMiscMultiProcess(FSDPTest):
         fsdp_model.train()
         ddp_model.train()
         for i in range(5):
-            x = torch.randn(8, 1, 28, 28, device="cuda").requires_grad_()
-            y = torch.randint(low=0, high=9, size=(8,), device="cuda")
+            x = torch.randn(8, 1, 28, 28, device="xpu").requires_grad_()
+            y = torch.randint(low=0, high=9, size=(8,), device="xpu")
             for model, opt in ((fsdp_model, fsdp_opt), (ddp_model, ddp_opt)):
                 seed = self.rank + i
                 torch.manual_seed(seed)
-                torch.cuda.manual_seed(seed)
+                torch.xpu.manual_seed(seed)
                 loss = model(x, y).sum()
                 losses.append(loss)
                 loss.backward()
@@ -272,12 +272,12 @@ class TestFSDPMiscMultiProcess(FSDPTest):
                     return out1
 
         fsdp = FSDP(
-            MyModel().cuda(),
+            MyModel().xpu(),
             sharding_strategy=sharding_strategy,
             auto_wrap_policy=always_wrap_policy,
         )
-        x = torch.randn(10, 10, device="cuda")
-        y = torch.randn(10, 10, device="cuda")
+        x = torch.randn(10, 10, device="xpu")
+        y = torch.randn(10, 10, device="xpu")
         for _ in range(4):
             if use_second_layer:
                 a, _ = fsdp(x, y)
@@ -336,7 +336,7 @@ class TestFSDPMiscMultiProcess(FSDPTest):
                     torch.testing.assert_close(p1, p2)
 
         fsdp_ctor = functools.partial(FSDP, sharding_strategy=sharding_strategy)
-        m = MyModule().cuda()
+        m = MyModule().xpu()
         m_local = deepcopy(m)
         local_m = m_local
         prev_params = [p.clone() for p in m_local.parameters()]
@@ -349,7 +349,7 @@ class TestFSDPMiscMultiProcess(FSDPTest):
         opt_local = torch.optim.SGD(local_m.parameters(), lr=1e-3)
 
         for i in range(6):
-            t = torch.ones(4, device="cuda")
+            t = torch.ones(4, device="xpu")
             a, b = m(t)
             local_a, local_b = local_m(t)
             if i < 2:
@@ -385,7 +385,7 @@ class TestFSDPMiscMultiProcess(FSDPTest):
     @skip_if_lt_x_gpu(2)
     def test_fsdp_optim_overlap_no_use_orig_params_error(self):
         fsdp_overlap = FSDP(
-            MyModel().cuda(),
+            MyModel().xpu(),
             auto_wrap_policy=always_wrap_policy,
             use_orig_params=False,
         )
@@ -398,7 +398,7 @@ class TestFSDPMiscMultiProcess(FSDPTest):
             register_hook=False,
         )
 
-        inp = torch.randn(10, 10, device="cuda")
+        inp = torch.randn(10, 10, device="xpu")
         with self.assertRaisesRegex(
             RuntimeError, "only supported with use_orig_params=True"
         ):
@@ -409,16 +409,16 @@ class TestFSDPMiscMultiProcess(FSDPTest):
         torch.manual_seed(0)
         for cpu_offload in [True, False]:
             offload = CPUOffload(offload_params=cpu_offload)
-            model = MyModel().cuda()
+            model = MyModel().xpu()
             model_overlap = deepcopy(model)
             fsdp = FSDP(
-                model.cuda(),
+                model.xpu(),
                 auto_wrap_policy=always_wrap_policy,
                 use_orig_params=True,
                 cpu_offload=offload,
             )
             fsdp_overlap = FSDP(
-                model_overlap.cuda(),
+                model_overlap.xpu(),
                 auto_wrap_policy=always_wrap_policy,
                 use_orig_params=True,
                 cpu_offload=offload,
@@ -445,7 +445,7 @@ class TestFSDPMiscMultiProcess(FSDPTest):
                 ]
 
             for i in range(6):
-                inp = torch.randn(2, 2, device="cuda")
+                inp = torch.randn(2, 2, device="xpu")
                 with torch.no_grad():
                     inp_clone = inp.clone()
                 fsdp(inp, inp).sum().backward()
@@ -968,7 +968,7 @@ class TestFSDPMiscMultiThread(FSDPTestMultiThread):
         with self.assertRaisesRegex(
             ValueError, f"Expects one homogeneous value for {attr_name}"
         ):
-            inp = fsdp_model.module.get_input(torch.device("cuda"))
+            inp = fsdp_model.module.get_input(torch.device("xpu"))
             fsdp_model(*inp)
 
     @skip_if_lt_x_gpu(2)
@@ -976,7 +976,7 @@ class TestFSDPMiscMultiThread(FSDPTestMultiThread):
         regex = r"FSDP will not all-gather parameters for containers that do not implement forward"
         model = nn.ModuleList([MLP(8, torch.device("cpu")) for _ in range(3)])
         with self.assertWarnsRegex(UserWarning, regex):
-            FSDP(model, device_id="cuda")
+            FSDP(model, device_id="xpu")
         model = nn.ModuleDict(
             {"1": MLP(8, torch.device("cpu")), "2": MLP(8, torch.device("cpu"))}
         )
@@ -1000,7 +1000,7 @@ class TestFSDPMiscWorldSize1(FSDPTestMultiThread):
         # warning
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")  # trigger all warnings
-            FSDP(nn.Linear(3, 3).cuda(), sharding_strategy=ShardingStrategy.NO_SHARD)
+            FSDP(nn.Linear(3, 3).xpu(), sharding_strategy=ShardingStrategy.NO_SHARD)
             for warning in w:
                 self.assertTrue(
                     warning.category != UserWarning
@@ -1014,16 +1014,16 @@ class TestFSDPMiscWorldSize1(FSDPTestMultiThread):
             warning_prefix + " " + str(ShardingStrategy.FULL_SHARD) + warning_suffix
         )
         with self.assertWarnsRegex(UserWarning, expected_regex_full_shard):
-            FSDP(nn.Linear(3, 3).cuda(), sharding_strategy=ShardingStrategy.FULL_SHARD)
+            FSDP(nn.Linear(3, 3).xpu(), sharding_strategy=ShardingStrategy.FULL_SHARD)
         with self.assertWarnsRegex(UserWarning, expected_regex_full_shard):
-            FSDP(nn.Linear(3, 3).cuda())
+            FSDP(nn.Linear(3, 3).xpu())
         # - Pass `SHARD_GRAD_OP`
         expected_regex_shard_grad_op = (
             warning_prefix + " " + str(ShardingStrategy.SHARD_GRAD_OP) + warning_suffix
         )
         with self.assertWarnsRegex(UserWarning, expected_regex_shard_grad_op):
             FSDP(
-                nn.Linear(3, 3).cuda(), sharding_strategy=ShardingStrategy.SHARD_GRAD_OP
+                nn.Linear(3, 3).xpu(), sharding_strategy=ShardingStrategy.SHARD_GRAD_OP
             )
 
     @skip_if_lt_x_gpu(1)
@@ -1040,19 +1040,19 @@ class TestFSDPMiscWorldSize1(FSDPTestMultiThread):
         with self.assertRaisesRegex(
             RuntimeError,
             "An FSDP-managed module unexpectedly has parameters on cpu. Make "
-            "sure to move the module to cuda:0 before training.",
+            "sure to move the module to xpu:0 before training.",
         ):
             fsdp_model(inp)
 
         # Incorrectly moving from CPU -> GPU
         model = torch.nn.Linear(10, 10)
         fsdp_model = FSDP(model, cpu_offload=CPUOffload(offload_params=True))
-        fsdp_model.to(torch.device("cuda"))
+        fsdp_model.to(torch.device("xpu"))
         inp = torch.randn((2, 10))
         with self.assertRaisesRegex(
             RuntimeError,
             "An FSDP-managed module with parameter CPU offloading enabled has "
-            "parameters on cuda:0. Make sure to not move the module from CPU "
+            "parameters on xpu:0. Make sure to not move the module from CPU "
             "when offloading parameters.",
         ):
             fsdp_model(inp)
@@ -1088,16 +1088,16 @@ class TestFSDPMiscWorldSize1(FSDPTestMultiThread):
 
         # Construct FSDP module without changing any environment variables and
         # run forward, which triggers both unsharded and sharded view setting
-        module = SetattrLinear(5, 5, torch.device("cuda"))
+        module = SetattrLinear(5, 5, torch.device("xpu"))
         fsdp_module = FSDP(module, use_orig_params=use_orig_params)
-        inp = torch.randn((8, 5), device=torch.device("cuda"))
+        inp = torch.randn((8, 5), device=torch.device("xpu"))
         called_setattr_override = False
         fsdp_module(inp)
         self.assertTrue(called_setattr_override)
 
         # Repeat with unsafe setattr explicitly enabled
         os.environ[_FSDP_USE_UNSAFE_SETATTR] = "1"
-        module = SetattrLinear(5, 5, torch.device("cuda"))
+        module = SetattrLinear(5, 5, torch.device("xpu"))
         fsdp_module = FSDP(module, use_orig_params=use_orig_params)
         called_setattr_override = False
         fsdp_module(inp)
@@ -1105,7 +1105,7 @@ class TestFSDPMiscWorldSize1(FSDPTestMultiThread):
 
         # Repeat with unsafe setattr explicitly disabled
         os.environ[_FSDP_USE_UNSAFE_SETATTR] = "0"
-        module = SetattrLinear(5, 5, torch.device("cuda"))
+        module = SetattrLinear(5, 5, torch.device("xpu"))
         fsdp_module = FSDP(module, use_orig_params=use_orig_params)
         called_setattr_override = False
         fsdp_module(inp)

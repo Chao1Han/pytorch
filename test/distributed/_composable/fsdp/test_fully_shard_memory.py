@@ -18,7 +18,7 @@ from torch.testing._internal.distributed._tensor.common_dtensor import (
 class TestFullyShardMemory(FSDPTest):
     @property
     def world_size(self) -> int:
-        return min(2, torch.cuda.device_count())
+        return min(2, torch.xpu.device_count())
 
     @skip_if_lt_x_gpu(2)
     def test_fully_shard_training_memory(self):
@@ -56,10 +56,10 @@ class TestFullyShardMemory(FSDPTest):
         # Pre-run a linear forward (gemm and bias) and backward (gemm) to
         # allocate the cuBLAS workspaces before measuring the memory usage
         # since the workspace size can differ between hardwares
-        lin = torch.nn.Linear(768, 768, device="cuda")
-        inp = torch.randn(1, 768, device="cuda")
+        lin = torch.nn.Linear(768, 768, device="xpu")
+        inp = torch.randn(1, 768, device="xpu")
         lin(inp).sum().backward()
-        torch.cuda.empty_cache()
+        torch.xpu.empty_cache()
         base_mem_mb = self._get_peak_active_memory_mb()
         vocab_size = 32
         model_args = ModelArgs(
@@ -108,7 +108,7 @@ class TestFullyShardMemory(FSDPTest):
         self.assertLessEqual(curr_mem_mb - base_mem_mb, init_mem_mb)
 
         # Use a small input to minimize activation memory usage
-        inp = torch.randint(0, vocab_size, (1, 4), device="cuda")
+        inp = torch.randint(0, vocab_size, (1, 4), device="xpu")
 
         # Forward:
         loss = model(inp)
@@ -166,7 +166,7 @@ class TestFullyShardMemory(FSDPTest):
             ) * 4 / 1e6 + buffer_mb
         self.assertLessEqual(mem_mb - base_mem_mb, expected_mem_mb)
         del loss
-        torch.cuda.reset_peak_memory_stats()
+        torch.xpu.reset_peak_memory_stats()
 
         # Optimizer step: unsharded parameters/gradients freed
         if not run_optim_in_backward:
@@ -184,7 +184,7 @@ class TestFullyShardMemory(FSDPTest):
         # Zero grad: sharded gradients freed
         if not run_optim_in_backward:
             optim.zero_grad()
-        torch.cuda.reset_peak_memory_stats()  # reset after freeing
+        torch.xpu.reset_peak_memory_stats()  # reset after freeing
         mem_mb = self._get_peak_active_memory_mb()
         expected_mem_mb = 0
         if not use_cpu_offload:
@@ -225,11 +225,11 @@ class TestFullyShardMemory(FSDPTest):
         self.assertEqual(mem_mb, base_mem_mb)
 
     def _get_peak_active_memory_mb(self) -> int:
-        mem_stats = torch.cuda.memory_stats()
+        mem_stats = torch.xpu.memory_stats()
         return round(mem_stats["active_bytes.all.peak"] / 1e6)
 
     def _get_curr_active_memory_mb(self) -> int:
-        mem_stats = torch.cuda.memory_stats()
+        mem_stats = torch.xpu.memory_stats()
         return round(mem_stats["active_bytes.all.current"] / 1e6)
 
     def _register_optim_in_backward(

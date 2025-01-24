@@ -14,7 +14,7 @@ from torch.distributed.distributed_c10d import (
     get_world_size,
     init_process_group,
     is_initialized,
-    is_nccl_available,
+    is_xccl_available,
     ProcessGroup,
 )
 from torch.distributed.tensor._collective_utils import (
@@ -34,11 +34,11 @@ from torch.testing._internal.distributed.fake_pg import FakeStore
 
 def _get_device_type(world_size):
     if (
-        torch.cuda.is_available()
-        and torch.cuda.device_count() >= world_size
-        and is_nccl_available()
+        torch.xpu.is_available()
+        and torch.xpu.device_count() >= world_size
+        and is_xccl_available()
     ):
-        device_type = "cuda"
+        device_type = "xpu"
     else:
         device_type = "cpu"
     return device_type
@@ -61,7 +61,7 @@ class DeviceMeshTestGlooBackend(DTensorTestBase):
         mesh = init_device_mesh(self.device_type, (self.world_size,))
         mesh_group = mesh.get_group()
         default_group = _get_default_group()
-        if torch.cuda.is_available():
+        if torch.xpu.is_available():
             self.assertNotEqual(mesh_group, default_group)
             self.assertEqual(get_world_size(mesh_group), get_world_size(default_group))
         else:
@@ -105,10 +105,10 @@ class DeviceMeshTest(DTensorTestBase):
         mesh_shape = (2, self.world_size // 2)
         mesh_2d = init_device_mesh(self.device_type, mesh_shape)
 
-        # when eager init is used, the subgroup is created from nccl comm split and
+        # when eager init is used, the subgroup is created from xccl comm split and
         # there would be bound_device_id immediately assigned for the subgroup.
-        if self.backend == "nccl":
-            curr_device = torch.cuda.current_device()
+        if self.backend == "xccl":
+            curr_device = torch.xpu.current_device()
             self.assertEqual(mesh_2d.get_group(0).bound_device_id.index, curr_device)
             self.assertEqual(mesh_2d.get_group(1).bound_device_id.index, curr_device)
 
@@ -167,7 +167,7 @@ class DeviceMeshTest(DTensorTestBase):
     @with_comms
     def test_device_mesh_2d(self):
         mesh_tensor = torch.arange(4).reshape(2, 2)
-        # construct a cuda device mesh
+        # construct a xpu device mesh
         mesh = DeviceMesh(self.device_type, mesh_tensor)
 
         # check all dim groups
@@ -203,7 +203,7 @@ class DeviceMeshTest(DTensorTestBase):
     def test_fake_pg_device_mesh(self):
         fake_store = FakeStore()
         init_process_group("fake", store=fake_store, rank=0, world_size=self.world_size)
-        device_type = "cuda" if torch.cuda.is_available() else "cpu"
+        device_type = "xpu" if torch.xpu.is_available() else "cpu"
         mesh = DeviceMesh(device_type, torch.arange(self.world_size))
 
         local_tensor = torch.randn(2, 8)
@@ -242,7 +242,7 @@ class DeviceMeshTest(DTensorTestBase):
         invalid_mesh = [[0, 1], [2, 3]]  # 2D mesh when we need 1D
         regex = r"Invalid mesh \[\[0, 1\], \[2, 3\]\] for ProcessGroup with ranks \[0, 1, 2, 3\]"
         with self.assertRaisesRegex(ValueError, regex):
-            DeviceMesh.from_group(global_pg, "cuda", invalid_mesh)
+            DeviceMesh.from_group(global_pg, "xpu", invalid_mesh)
 
         device_mesh = init_device_mesh(self.device_type, (2, 2))
         groups = device_mesh.get_all_groups()
@@ -259,12 +259,12 @@ class DeviceMeshTest(DTensorTestBase):
             # test init_device_mesh with an invalid device type that contains a GPU index
             mesh_shape = (2, self.world_size // 2)
             init_device_mesh(
-                "cuda:0", mesh_shape=mesh_shape, mesh_dim_names=("dp", "tp")
+                "xpu:0", mesh_shape=mesh_shape, mesh_dim_names=("dp", "tp")
             )
 
     @with_comms
     def test_set_mesh_dim_group_options(self):
-        device_type = "cuda" if torch.cuda.is_available() else "cpu"
+        device_type = "xpu" if torch.xpu.is_available() else "cpu"
         _mesh_resources._set_mesh_dim_group_options(1, "fake", None)
 
         mesh_tensor = torch.arange(4).reshape(2, 2)
@@ -280,7 +280,7 @@ class DeviceMeshTestNDim(DTensorTestBase):
 
     @with_comms
     def test_device_mesh_nd(self):
-        # construct a cuda device mesh
+        # construct a xpu device mesh
         mesh_tensor = torch.arange(8).reshape(2, 2, 2)
         mesh = DeviceMesh(self.device_type, mesh_tensor)
 

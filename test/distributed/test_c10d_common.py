@@ -57,7 +57,7 @@ if platform == "darwin":
 else:
     LOOPBACK = "lo"
 
-torch.backends.cuda.matmul.allow_tf32 = False
+torch.backends.xpu.matmul.allow_tf32 = False
 
 
 def gpus_for_rank(world_size):
@@ -66,8 +66,8 @@ def gpus_for_rank(world_size):
     On a single node, all visible GPUs are evenly
     divided to subsets, each process only uses a subset.
     """
-    visible_devices = list(range(torch.cuda.device_count()))
-    gpus_per_process = torch.cuda.device_count() // world_size
+    visible_devices = list(range(torch.xpu.device_count()))
+    gpus_per_process = torch.xpu.device_count() // world_size
     gpus_for_rank = []
     for rank in range(world_size):
         gpus_for_rank.append(
@@ -339,7 +339,7 @@ class CommonDistributedDataParallelTest:
         gradient_as_bucket_view=False,
     ):
         model = Net()
-        device = devices[0] if devices else torch.device(f"cuda:{self.rank:d}")
+        device = devices[0] if devices else torch.device(f"xpu:{self.rank:d}")
         ddp_model = DistributedDataParallel(
             copy.deepcopy(model).to(device),
             device_ids=device_ids,
@@ -380,7 +380,7 @@ class CommonDistributedDataParallelTest:
             gradient_as_bucket_view=gradient_as_bucket_view,
         )
 
-        input = torch.randn(global_batch_size, 2).cuda(devices[0])
+        input = torch.randn(global_batch_size, 2).xpu(devices[0])
         target = torch.randn(global_batch_size, 4)
 
         return model, ddp_model, input, target
@@ -414,10 +414,10 @@ class CommonDistributedDataParallelTest:
         allow_none_grads=False,
     ):
         # to reproduce the same training results
-        torch.cuda.set_device(self.rank)
+        torch.xpu.set_device(self.rank)
         torch.manual_seed(31415)
-        model = copy.deepcopy(input_model).cuda()
-        ddp_model = copy.deepcopy(input_model).cuda()
+        model = copy.deepcopy(input_model).xpu()
+        ddp_model = copy.deepcopy(input_model).xpu()
         ddp_model = nn.parallel.DistributedDataParallel(
             ddp_model,
             bucket_cap_mb=1,
@@ -533,8 +533,8 @@ class CommonDistributedDataParallelTest:
     def _prepare_dummy_data(self):
         ddp_bs = 16
         bs = ddp_bs * self.world_size
-        input = torch.rand((bs, 20), device="cuda", requires_grad=True)
-        target = torch.randn((bs, 20), device="cuda")
+        input = torch.rand((bs, 20), device="xpu", requires_grad=True)
+        target = torch.randn((bs, 20), device="xpu")
         offset = self.rank * ddp_bs
         ddp_input = input[offset : offset + ddp_bs]
         ddp_target = target[offset : offset + ddp_bs]
@@ -694,7 +694,7 @@ class CommonDistributedDataParallelTest:
         Test that checkpointing with weight sharing works.
         """
         process_group = self._get_process_group()
-        torch.cuda.set_device(self.rank)
+        torch.xpu.set_device(self.rank)
         for use_bucket_view, static_graph in product((False, True), (False, True)):
             torch.manual_seed(31415)
             l1 = nn.Linear(20, 20)
@@ -717,7 +717,7 @@ class CommonDistributedDataParallelTest:
         same layer twice and having weights shared across layers.
         """
         process_group = self._get_process_group()
-        torch.cuda.set_device(self.rank)
+        torch.xpu.set_device(self.rank)
         for use_bucket_view in (True, False):
             self._test_ddp_checkpointing(
                 self.CheckpointTwiceModuleWeightSharing(),
@@ -1141,7 +1141,7 @@ class AbstractCommTest:
 
         # Verify sequence numbers are appropriately incremented
         for i in range(10):
-            t = torch.ones(1, device=torch.cuda.current_device())
+            t = torch.ones(1, device=torch.xpu.current_device())
             dist.all_reduce(t, group=process_group)
             if not c10d._rank_not_in_group(process_group):
                 seq_num = self._verify_sequence_number_across_pg(
@@ -1172,7 +1172,7 @@ class AbstractCommTest:
                 self.assertEqual(rank_to_seq_num[0] + 1, rank_to_seq_num[1])
 
     def _test_sequence_num_incremented_default_group(self, backend_name):
-        torch.cuda.set_device(self.rank)
+        torch.xpu.set_device(self.rank)
         store = dist.FileStore(self.file_name, self.world_size)
         dist.init_process_group(
             backend_name,
@@ -1186,7 +1186,7 @@ class AbstractCommTest:
         )
 
     def _test_sequence_num_incremented_subgroup(self, backend_name):
-        torch.cuda.set_device(self.rank)
+        torch.xpu.set_device(self.rank)
         store = dist.FileStore(self.file_name, self.world_size)
         dist.init_process_group(
             backend_name,
@@ -1241,8 +1241,8 @@ class AbstractCommTest:
         in_group_ranks = list(filter(lambda x: x % 2 == 0, range(self.world_size)))
         group = dist.new_group(in_group_ranks)
 
-        x = torch.zeros(2, 2).cuda(self.rank)
-        xs = [torch.zeros(2, 2).cuda(self.rank) for _ in range(len(in_group_ranks))]
+        x = torch.zeros(2, 2).xpu(self.rank)
+        xs = [torch.zeros(2, 2).xpu(self.rank) for _ in range(len(in_group_ranks))]
         if self.rank not in in_group_ranks:
             msg = ".*{}.*does not belong to.*"
             with self.assertWarnsOnceRegex(UserWarning, msg.format("all_gather")):
@@ -1371,7 +1371,7 @@ class AbstractCommTest:
             rank=self.rank,
             store=store,
         )
-        device = "cuda" if backend == "nccl" else "cpu"
+        device = "xpu" if backend == "xccl" else "cpu"
         # test alltoall_base
         tensor = torch.tensor([1, 0, 0, 1], dtype=torch.bool, device=device)
         zeros = torch.tensor([0, 0, 0, 0], dtype=torch.bool, device=device)
@@ -1553,8 +1553,8 @@ class CommTest(AbstractCommTest, MultiProcessTestCase):
 
 class DummyWork(dist._Work):
     def wait(self, timeout=5.0):
-        if torch.cuda.is_available():
-            torch.cuda.current_stream().synchronize()
+        if torch.xpu.is_available():
+            torch.xpu.current_stream().synchronize()
         return True
 
 
@@ -1664,17 +1664,17 @@ class PythonProcessGroupExtensionTest(MultiProcessTestCase):
 
         # Ensure backend config can be created with the following arguments
         backend_config_strings_and_expected_values = [
-            (dist.Backend.GLOO, "cpu:gloo,cuda:gloo"),
-            (dist.Backend.NCCL, "cuda:nccl"),
-            (dist.Backend.MPI, "cpu:mpi,cuda:mpi"),
-            (dist.Backend.UCC, "cpu:ucc,cuda:ucc"),
-            (dist.Backend.DUMMY, "cpu:dummy,cuda:dummy"),
-            ("DUMMY", "cpu:dummy,cuda:dummy"),
-            ("dummy", "cpu:dummy,cuda:dummy"),
-            ("cpu:dummy,cuda:dummy", "cpu:dummy,cuda:dummy"),
-            ("cpu:dummy,cuda:nccl", "cpu:dummy,cuda:nccl"),
-            ("cpu:gloo,cuda:dummy", "cpu:gloo,cuda:dummy"),
-            ("cpu:gloo,cuda:nccl", "cpu:gloo,cuda:nccl"),
+            (dist.Backend.GLOO, "cpu:gloo,xpu:gloo"),
+            (dist.Backend.XCCL, "xpu:xccl"),
+            (dist.Backend.MPI, "cpu:mpi,xpu:mpi"),
+            (dist.Backend.UCC, "cpu:ucc,xpu:ucc"),
+            (dist.Backend.DUMMY, "cpu:dummy,xpu:dummy"),
+            ("DUMMY", "cpu:dummy,xpu:dummy"),
+            ("dummy", "cpu:dummy,xpu:dummy"),
+            ("cpu:dummy,xpu:dummy", "cpu:dummy,xpu:dummy"),
+            ("cpu:dummy,xpu:xccl", "cpu:dummy,xpu:xccl"),
+            ("cpu:gloo,xpu:dummy", "cpu:gloo,xpu:dummy"),
+            ("cpu:gloo,xpu:xccl", "cpu:gloo,xpu:xccl"),
         ]
 
         for config_str, expected_value in backend_config_strings_and_expected_values:
@@ -1685,8 +1685,8 @@ class PythonProcessGroupExtensionTest(MultiProcessTestCase):
 
         # Ensure backend config will raise ValueError with the following arguments
         invalid_backend_config_strings = [
-            "cpu:gloo,cuda:nccl,",  # trailing comma
-            "cpu:gloo,cuda:nccl,cpu:dummy",  # duplicate device
+            "cpu:gloo,xpu:xccl,",  # trailing comma
+            "cpu:gloo,xpu:xccl,cpu:dummy",  # duplicate device
         ]
         for config_str in invalid_backend_config_strings:
             with self.subTest(config_str):
@@ -1701,7 +1701,7 @@ class PythonProcessGroupExtensionTest(MultiProcessTestCase):
         os.environ["MASTER_ADDR"] = "localhost"
         os.environ["MASTER_PORT"] = "6789"
         dist.init_process_group(
-            "cpu:dummy,cuda:dummy", rank=self.rank, world_size=self.world_size
+            "cpu:dummy,xpu:dummy", rank=self.rank, world_size=self.world_size
         )
 
         # test all_gather
@@ -1816,8 +1816,8 @@ class ProcessGroupWithDispatchedCollectivesTests(MultiProcessTestCase):
 
     def test_init_process_group_optional_backend(self):
         store = dist.FileStore(self.file_name, self.world_size)
-        # creates both gloo and nccl backend
-        if dist.is_gloo_available() and dist.is_nccl_available():
+        # creates both gloo and xccl backend
+        if dist.is_gloo_available() and dist.is_xccl_available():
             dist.init_process_group(
                 store=store,
                 rank=self.rank,
@@ -1834,8 +1834,8 @@ class ProcessGroupWithDispatchedCollectivesTests(MultiProcessTestCase):
             elif backend == dist.Backend.MPI:
                 if not dist.is_mpi_available():
                     continue
-            elif backend == dist.Backend.NCCL:
-                if not dist.is_nccl_available() or not torch.cuda.is_available():
+            elif backend == dist.Backend.XCCL:
+                if not dist.is_xccl_available() or not torch.xpu.is_available():
                     continue
             elif backend == dist.Backend.GLOO:
                 if not dist.is_gloo_available():
@@ -1871,8 +1871,8 @@ class ProcessGroupWithDispatchedCollectivesTests(MultiProcessTestCase):
         # correctly dispatched
 
         # TODO: this will be updated in the future to not be backend specific
-        device = "cuda" if backend == "nccl" else "cpu"
-        # ensure supported devices (cpu, cuda) succeeds during dispatch call
+        device = "xpu" if backend == "xccl" else "cpu"
+        # ensure supported devices (cpu, xpu) succeeds during dispatch call
         tensor = torch.zeros(2, 2, device=torch.device(device))
         # multi tensor collectives
         if collective == dist.barrier:
@@ -1923,7 +1923,7 @@ class ProcessGroupWithDispatchedCollectivesTests(MultiProcessTestCase):
             store=store,
         )
         # TODO: this will be updated in the future to not be backend specific
-        device = "cuda" if backend == "nccl" else "cpu"
+        device = "xpu" if backend == "xccl" else "cpu"
         tensors = [torch.ones(10, 10, device=torch.device(device))]
         dist.all_reduce_coalesced(tensors, dist.ReduceOp.SUM)
         for tensor in tensors:
@@ -1937,7 +1937,7 @@ class ProcessGroupWithDispatchedCollectivesTests(MultiProcessTestCase):
             rank=self.rank,
             store=store,
         )
-        device = "cuda" if backend == "nccl" else "cpu"
+        device = "xpu" if backend == "xccl" else "cpu"
         # test alltoall_base
         input_tensor = torch.ones(2, 2, device=torch.device(device))
         output_tensor = torch.zeros(2, 2, device=torch.device(device))
@@ -1964,7 +1964,7 @@ class ReduceOpTest(TestCase):
             self.assertTrue(isinstance(reduce_op, c10d.ReduceOp))
         for scale in (torch.tensor(1.0), 2.0):
             self.assertTrue(
-                isinstance(dist._make_nccl_premul_sum(scale), c10d.ReduceOp)
+                isinstance(dist._make_xccl_premul_sum(scale), c10d.ReduceOp)
             )
 
     # Ref: https://github.com/pytorch/pytorch/pull/87303#discussion_r1002879700
@@ -1985,7 +1985,7 @@ class ReduceOpTest(TestCase):
             self.assertEqual(copy.deepcopy(c10d.ReduceOp(reduce_op)), reduce_op)
 
         for scale in (torch.tensor(1.0), 2.0):
-            reduce_op = dist._make_nccl_premul_sum(scale)
+            reduce_op = dist._make_xccl_premul_sum(scale)
             self.assertEqual(copy.copy(reduce_op), reduce_op)
             self.assertEqual(copy.deepcopy(reduce_op), reduce_op)
 
@@ -2004,7 +2004,7 @@ class ReduceOpTest(TestCase):
             orig = c10d.ReduceOp(reduce_op)
             self.assertEqual(pickle.loads(pickle.dumps(orig)), orig)
         for scale in (torch.tensor(1.0), 2.0):
-            reduce_op = dist._make_nccl_premul_sum(scale)
+            reduce_op = dist._make_xccl_premul_sum(scale)
             self.assertEqual(pickle.loads(pickle.dumps(reduce_op)), reduce_op)
 
     # Ref: https://github.com/pytorch/pytorch/issues/90072
@@ -2070,7 +2070,7 @@ class LocalRankTest(MultiProcessTestCase):
 
 if __name__ == "__main__":
     assert (
-        not torch.cuda._initialized
+        not torch.xpu._initialized
     ), "test_distributed must not have initialized CUDA context on main process"
 
     run_tests()
