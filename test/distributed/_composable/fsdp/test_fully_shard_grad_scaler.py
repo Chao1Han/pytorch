@@ -28,16 +28,16 @@ class TestFullyShardGradientScaler(FSDPTest):
     def _test_gradient_scaler(self, has_inf: bool, test_2d: bool):
         torch.manual_seed(0)
         model = nn.Sequential(
-            *[nn.Linear(4, 4, device="cuda", bias=False) for _ in range(2)]
+            *[nn.Linear(4, 4, device="xpu", bias=False) for _ in range(2)]
         )
         for layer in model:
             fully_shard(layer)
         fully_shard(model)
-        input = torch.randn([4, 4], device="cuda")
+        input = torch.randn([4, 4], device="xpu")
 
         if test_2d:
             mesh_2d = init_device_mesh(
-                "cuda", (2, self.world_size // 2), mesh_dim_names=("dp", "tp")
+                "xpu", (2, self.world_size // 2), mesh_dim_names=("dp", "tp")
             )
             dp_mesh, tp_mesh = mesh_2d["dp"], mesh_2d["tp"]
             model = nn.Sequential(MLP(2), MLP(2), MLP(2))
@@ -57,7 +57,7 @@ class TestFullyShardGradientScaler(FSDPTest):
             for module in model:
                 fully_shard(module, mesh=dp_mesh)
             fully_shard(model, mesh=dp_mesh)
-            input = torch.randn((2,), device="cuda")
+            input = torch.randn((2,), device="xpu")
 
         loss = model(input).sum()
         scaler = GradScaler(init_scale=2.0, enabled=True)
