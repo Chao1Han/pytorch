@@ -37,7 +37,7 @@ from torch.distributed.pipelining.schedules import (
     W,
 )
 from torch.distributed.pipelining.stage import _PipelineStageBase, PipelineStage
-from torch.testing._internal.common_distributed import requires_nccl
+from torch.testing._internal.common_distributed import requires_xccl
 from torch.testing._internal.common_utils import (
     check_leaked_tensors,
     instantiate_parametrized_tests,
@@ -657,7 +657,7 @@ class TestScheduleLowering(TestCase):
         # print(_format_pipeline_order(simulated_schedule))
         self.assertEqual(num_steps, 113)
 
-    @requires_nccl()
+    @requires_xccl()
     def test_grad_with_v_schedule(self):
         """
         We have a special case for V schedules where 2 adjacent stages are on the same rank.
@@ -677,7 +677,7 @@ class TestScheduleLowering(TestCase):
         d_hid = 512
         batch_size = 256
         n_stages = 2
-        device = "cuda"
+        device = "xpu"
         full_mod = MultiMLP(d_hid, n_layers=n_stages)
         full_mod.to(device)
 
@@ -777,7 +777,7 @@ class TestScheduleLowering(TestCase):
 
         torch.distributed.destroy_process_group()
 
-    @requires_nccl()
+    @requires_xccl()
     def test_grad_with_split_b_w(self):
         """
         Ensure that separate dInput and dWeight computations are correctly executed.
@@ -790,7 +790,7 @@ class TestScheduleLowering(TestCase):
         d_hid = 512
         batch_size = 256
         n_stages = 1
-        device = "cuda"
+        device = "xpu"
         full_mod = MultiMLP(d_hid, n_layers=n_stages)
         full_mod.to(device)
 

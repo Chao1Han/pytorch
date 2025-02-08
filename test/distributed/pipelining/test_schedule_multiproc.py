@@ -31,7 +31,7 @@ from torch.distributed.pipelining.schedules import _PipelineScheduleRuntime
 from torch.testing._internal.common_cuda import TEST_MULTIGPU
 from torch.testing._internal.common_distributed import (
     MultiProcContinousTest,
-    requires_nccl,
+    requires_xccl,
 )
 from torch.testing._internal.common_utils import (
     check_leaked_tensors,
@@ -47,13 +47,13 @@ d_hid = 512
 batch_size = 256
 
 torch.manual_seed(0)
-
+TEST_MULTIGPU = torch.xpu.device_count() >= 2
 
 class ScheduleTest(MultiProcContinousTest):
     @classmethod
     def backend_str(cls) -> str:
         # Testing with NCCL backend
-        return "nccl"
+        return "xccl"
 
     @classmethod
     def setUpClass(cls):
@@ -62,10 +62,10 @@ class ScheduleTest(MultiProcContinousTest):
         Set up the device.
         """
         super().setUpClass()
-        dev_id = cls.rank % torch.cuda.device_count()
-        cls.device = torch.device(f"cuda:{dev_id}")
+        dev_id = cls.rank % torch.xpu.device_count()
+        cls.device = torch.device(f"xpu:{dev_id}")
 
-    @requires_nccl()
+    @requires_xccl()
     @skip_but_pass_in_sandcastle_if(not TEST_MULTIGPU, "NCCL test requires 2+ GPUs")
     @parametrize("ScheduleClass", [_ScheduleForwardOnly])
     def test_forward_only(self, ScheduleClass):
@@ -115,7 +115,7 @@ class ScheduleTest(MultiProcContinousTest):
 
             torch.testing.assert_close(x_clone, out)
 
-    @requires_nccl()
+    @requires_xccl()
     @skip_but_pass_in_sandcastle_if(not TEST_MULTIGPU, "NCCL test requires 2+ GPUs")
     @parametrize("ScheduleClass", [ScheduleGPipe, Schedule1F1B])
     def test_multi_iter(self, ScheduleClass):
@@ -155,7 +155,7 @@ class ScheduleTest(MultiProcContinousTest):
             else:
                 schedule.step()
 
-    @requires_nccl()
+    @requires_xccl()
     @skip_but_pass_in_sandcastle_if(not TEST_MULTIGPU, "NCCL test requires 2+ GPUs")
     @parametrize("ScheduleClass", [ScheduleGPipe, Schedule1F1B])
     def test_kwargs_with_tracer(self, ScheduleClass):
@@ -204,7 +204,7 @@ class ScheduleTest(MultiProcContinousTest):
             torch.testing.assert_close(out, ref_out, rtol=1e-2, atol=5e-3)
             torch.testing.assert_close(pipe_loss, ref_loss)
 
-    @requires_nccl()
+    @requires_xccl()
     @skip_but_pass_in_sandcastle_if(not TEST_MULTIGPU, "NCCL test requires 2+ GPUs")
     @parametrize("ScheduleClass", [ScheduleGPipe, Schedule1F1B])
     @parametrize("ModelClass", [MultiMLP])
@@ -280,7 +280,7 @@ class ScheduleTest(MultiProcContinousTest):
                 print(f"Gradient test failed for {name}: {p.grad} vs {ref_p.grad}")
                 raise
 
-    @requires_nccl()
+    @requires_xccl()
     @skip_but_pass_in_sandcastle_if(not TEST_MULTIGPU, "NCCL test requires 2+ GPUs")
     @parametrize("ScheduleClass", [ScheduleGPipe, Schedule1F1B])
     @parametrize("shape_inference", [True, False])
@@ -364,7 +364,7 @@ class ScheduleTest(MultiProcContinousTest):
                 print(f"Gradient test failed for {name}: {p.grad} vs {ref_p.grad}")
                 raise
 
-    @requires_nccl()
+    @requires_xccl()
     @skip_but_pass_in_sandcastle_if(not TEST_MULTIGPU, "NCCL test requires 2+ GPUs")
     @parametrize(
         "ScheduleClass",
@@ -520,7 +520,7 @@ class ScheduleTest(MultiProcContinousTest):
                     print(f"Gradient test failed for {name}: {p.grad} vs {ref_p.grad}")
                     raise
 
-    @requires_nccl()
+    @requires_xccl()
     @skip_but_pass_in_sandcastle_if(not TEST_MULTIGPU, "NCCL test requires 2+ GPUs")
     @parametrize("ScheduleClass", [ScheduleWithW, ScheduleInterleavedZeroBubble])
     def test_schedule_with_native_zero_bubble(self, ScheduleClass):
@@ -614,7 +614,7 @@ class ScheduleTest(MultiProcContinousTest):
                     )
                     raise
 
-    @requires_nccl()
+    @requires_xccl()
     @skip_but_pass_in_sandcastle_if(not TEST_MULTIGPU, "NCCL test requires 2+ GPUs")
     @parametrize(
         "ScheduleClass",
@@ -719,7 +719,7 @@ class ScheduleTest(MultiProcContinousTest):
                     print(f"Gradient test failed for {name}: {p.grad} vs {ref_p.grad}")
                     raise
 
-    @requires_nccl()
+    @requires_xccl()
     @skip_but_pass_in_sandcastle_if(not TEST_MULTIGPU, "NCCL test requires 2+ GPUs")
     @parametrize(
         "schedule_class", [ScheduleVShaped, ScheduleUnbalanced, ScheduleZBVZeroBubble]
@@ -831,7 +831,7 @@ class ScheduleTest(MultiProcContinousTest):
                     print(f"Gradient test failed for {name}: {p.grad} vs {ref_p.grad}")
                     raise
 
-    @requires_nccl()
+    @requires_xccl()
     @skip_but_pass_in_sandcastle_if(not TEST_MULTIGPU, "NCCL test requires 2+ GPUs")
     @parametrize("ScheduleClass", [ScheduleInterleavedZeroBubble])
     def test_schedule_with_weight_update_mlp_e2e(self, ScheduleClass):
@@ -955,8 +955,8 @@ if __name__ == "__main__":
     # Check if GPU and NCCL are available
     if not (
         dist.is_available()
-        and dist.is_nccl_available()
-        and torch.cuda.device_count() > 1
+        and dist.is_xccl_available()
+        and torch.xpu.device_count() > 1
     ):
         print(
             "c10d NCCL not available or not enough GPUs, skipping tests",
