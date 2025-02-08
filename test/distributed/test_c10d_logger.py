@@ -17,7 +17,7 @@ if not dist.is_available():
     sys.exit(0)
 
 from torch.testing._internal.common_distributed import MultiProcessTestCase, TEST_SKIPS
-from torch.testing._internal.common_utils import run_tests, TEST_WITH_DEV_DBG_ASAN
+from torch.testing._internal.common_utils import run_tests, TEST_WITH_DEV_DBG_ASAN, TEST_XPU
 
 
 if TEST_WITH_DEV_DBG_ASAN:
@@ -28,7 +28,7 @@ if TEST_WITH_DEV_DBG_ASAN:
     sys.exit(0)
 
 BACKEND = dist.Backend.NCCL
-WORLD_SIZE = min(4, max(2, torch.cuda.device_count()))
+WORLD_SIZE = min(4, max(2, torch.accelerator.device_count()))
 
 
 def with_comms(func=None):
@@ -39,7 +39,7 @@ def with_comms(func=None):
 
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        if BACKEND == dist.Backend.NCCL and torch.cuda.device_count() < self.world_size:
+        if (BACKEND == dist.Backend.NCCL or BACKEND == dist.Backend.XCCL) and torch.accelerator.device_count() < self.world_size:
             sys.exit(TEST_SKIPS[f"multi-gpu-{self.world_size}"].exit_code)
         self.dist_init()
         func(self)
@@ -59,7 +59,7 @@ class C10dErrorLoggerTest(MultiProcessTestCase):
     def device(self):
         return (
             torch.device(self.rank)
-            if BACKEND == dist.Backend.NCCL
+            if (BACKEND == dist.Backend.NCCL or BACKEND == dist.Backend.XCCL)
             else torch.device("cpu")
         )
 
@@ -85,8 +85,8 @@ class C10dErrorLoggerTest(MultiProcessTestCase):
         )
 
         # set device for nccl pg for collectives
-        if BACKEND == "nccl":
-            torch.cuda.set_device(self.rank)
+        if BACKEND in ["nccl", "xccl"]:
+            torch.accelerator.set_device(self.rank)
 
     def test_get_or_create_logger(self):
         self.assertIsNotNone(_c10d_logger)
@@ -106,6 +106,9 @@ class C10dErrorLoggerTest(MultiProcessTestCase):
         except Exception:
             pass
 
+    @unittest.skipIf(
+        TEST_XPU, "XCCL not support version check, skipping"
+    )
     @with_comms
     def test_exception_logger(self) -> None:
         with self.assertRaises(Exception):
