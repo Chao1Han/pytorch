@@ -99,9 +99,9 @@ class ComposabilityTest(MultiProcContinousTest):
     @classmethod
     def backend_str(cls) -> str:
         # Testing with NCCL backend
-    if TEST_XPU:
-        return "xccl"
-    return "nccl"
+        if TEST_XPU:
+            return "xccl"
+        return "nccl"
 
     @classmethod
     def setUpClass(cls):

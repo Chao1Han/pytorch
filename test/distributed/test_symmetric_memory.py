@@ -39,17 +39,17 @@ from torch.testing._internal.common_utils import (
 def requires_xpu_p2p_access():
     xpu_p2p_access_available = (
         torch.xpu.is_available()
-        and torch.xpu.get_device_capability() >= (8, 0)
+        # and torch.xpu.get_device_capability() >= (8, 0)
         and torch.xpu.device_count() >= 2
     )
     num_devices = torch.xpu.device_count()
-    for i in range(num_devices - 1):
-        for j in range(i + 1, num_devices):
-            if not torch.xpu.can_device_access_peer(i, j):
-                xpu_p2p_access_available = False
-                break
-        if not xpu_p2p_access_available:
-            break
+    # for i in range(num_devices - 1):
+    #     for j in range(i + 1, num_devices):
+    #         if not torch.xpu.can_device_access_peer(i, j):
+    #             xpu_p2p_access_available = False
+    #             break
+    #     if not xpu_p2p_access_available:
+    #         break
 
     return skip_but_pass_in_sandcastle_if(
         not xpu_p2p_access_available,

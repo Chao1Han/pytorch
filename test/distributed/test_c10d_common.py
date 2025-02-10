@@ -57,7 +57,7 @@ if platform == "darwin":
 else:
     LOOPBACK = "lo"
 
-torch.backends.xpu.matmul.allow_tf32 = False
+torch.backends.cuda.matmul.allow_tf32 = False
 
 
 def gpus_for_rank(world_size):

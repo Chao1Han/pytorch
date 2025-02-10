@@ -10,7 +10,7 @@ from functools import partial, wraps
 import torch
 import torch.distributed as dist
 from torch.distributed.c10d_logger import _c10d_logger, _exception_logger
-
+import unittest
 
 if not dist.is_available():
     print("Distributed not available, skipping tests", file=sys.stderr)
