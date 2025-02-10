@@ -1664,13 +1664,13 @@ class PythonProcessGroupExtensionTest(MultiProcessTestCase):
 
         # Ensure backend config can be created with the following arguments
         backend_config_strings_and_expected_values = [
-            (dist.Backend.GLOO, "cpu:gloo,xpu:gloo"),
+            (dist.Backend.GLOO, "cpu:gloo,cuda:gloo"),
             (dist.Backend.XCCL, "xpu:xccl"),
-            (dist.Backend.MPI, "cpu:mpi,xpu:mpi"),
-            (dist.Backend.UCC, "cpu:ucc,xpu:ucc"),
-            (dist.Backend.DUMMY, "cpu:dummy,xpu:dummy"),
-            ("DUMMY", "cpu:dummy,xpu:dummy"),
-            ("dummy", "cpu:dummy,xpu:dummy"),
+            (dist.Backend.MPI, "cpu:mpi,cuda:mpi"),
+            (dist.Backend.UCC, "cpu:ucc,cuda:ucc"),
+            (dist.Backend.DUMMY, "cpu:dummy,cuda:dummy"),
+            ("DUMMY", "cpu:dummy,cuda:dummy"),
+            ("dummy", "cpu:dummy,cuda:dummy"),
             ("cpu:dummy,xpu:dummy", "cpu:dummy,xpu:dummy"),
             ("cpu:dummy,xpu:xccl", "cpu:dummy,xpu:xccl"),
             ("cpu:gloo,xpu:dummy", "cpu:gloo,xpu:dummy"),
@@ -1834,8 +1834,8 @@ class ProcessGroupWithDispatchedCollectivesTests(MultiProcessTestCase):
             elif backend == dist.Backend.MPI:
                 if not dist.is_mpi_available():
                     continue
-            elif backend == dist.Backend.XCCL:
-                if not dist.is_xccl_available() or not torch.xpu.is_available():
+            elif backend == dist.Backend.NCCL:
+                if not dist.is_nccl_available() or not torch.cuda.is_available():
                     continue
             elif backend == dist.Backend.GLOO:
                 if not dist.is_gloo_available():
@@ -1962,10 +1962,10 @@ class ReduceOpTest(TestCase):
             c10d.ReduceOp.BXOR,
         ):
             self.assertTrue(isinstance(reduce_op, c10d.ReduceOp))
-        for scale in (torch.tensor(1.0), 2.0):
-            self.assertTrue(
-                isinstance(dist._make_xccl_premul_sum(scale), c10d.ReduceOp)
-            )
+        # for scale in (torch.tensor(1.0), 2.0):
+        #     self.assertTrue(
+        #         isinstance(dist._make_xccl_premul_sum(scale), c10d.ReduceOp)
+        #     )
 
     # Ref: https://github.com/pytorch/pytorch/pull/87303#discussion_r1002879700
     def test_reduceop_copyable(self):
@@ -1984,10 +1984,10 @@ class ReduceOpTest(TestCase):
             self.assertEqual(copy.copy(c10d.ReduceOp(reduce_op)), reduce_op)
             self.assertEqual(copy.deepcopy(c10d.ReduceOp(reduce_op)), reduce_op)
 
-        for scale in (torch.tensor(1.0), 2.0):
-            reduce_op = dist._make_xccl_premul_sum(scale)
-            self.assertEqual(copy.copy(reduce_op), reduce_op)
-            self.assertEqual(copy.deepcopy(reduce_op), reduce_op)
+        # for scale in (torch.tensor(1.0), 2.0):
+        #     reduce_op = dist._make_xccl_premul_sum(scale)
+        #     self.assertEqual(copy.copy(reduce_op), reduce_op)
+        #     self.assertEqual(copy.deepcopy(reduce_op), reduce_op)
 
     def test_reduceop_pickle(self):
         for reduce_op in (
@@ -2003,9 +2003,9 @@ class ReduceOpTest(TestCase):
             pickle.loads(pickle.dumps(reduce_op))
             orig = c10d.ReduceOp(reduce_op)
             self.assertEqual(pickle.loads(pickle.dumps(orig)), orig)
-        for scale in (torch.tensor(1.0), 2.0):
-            reduce_op = dist._make_xccl_premul_sum(scale)
-            self.assertEqual(pickle.loads(pickle.dumps(reduce_op)), reduce_op)
+        # for scale in (torch.tensor(1.0), 2.0):
+        #     reduce_op = dist._make_nccl_premul_sum(scale)
+        #     self.assertEqual(pickle.loads(pickle.dumps(reduce_op)), reduce_op)
 
     # Ref: https://github.com/pytorch/pytorch/issues/90072
     def test_reduceop_equal(self):

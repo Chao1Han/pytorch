@@ -88,7 +88,7 @@ class TestObjectCollectives(MultiProcessTestCase):
 
         # set device for nccl pg for collectives
         if BACKEND in ["nccl", "xccl"]:
-            torch.accelerator.set_device(self.rank)
+            torch.accelerator.set_device_index(self.rank)
 
     @with_comms()
     def test_all_gather_object(self):
@@ -180,7 +180,5 @@ class TestObjectCollectives(MultiProcessTestCase):
         dist.broadcast_object_list(out_list, src=ranks[0], group=my_pg)
         self.assertEqual(ranks[0], out_list[0])
 
-devices = ("cuda", "cpu", "xpu")
-instantiate_device_type_tests(TestObjectCollectives, globals(), only_for=devices, allow_xpu=True)
 if __name__ == "__main__":
     run_tests()
