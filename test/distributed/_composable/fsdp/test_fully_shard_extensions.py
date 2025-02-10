@@ -261,7 +261,7 @@ class TestFullyShardAllGatherExtensionsMultiThread(
 
     @property
     def device(self) -> torch.device:
-        return torch.device("xpu:0")
+        return torch.device("xpu")
 
     @unittest.skipIf(not TEST_XPU, "no xpu")
     def test_all_gather_extensions_end_to_end(self):

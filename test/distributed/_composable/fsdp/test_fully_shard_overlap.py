@@ -60,8 +60,8 @@ class TestFullyShardOverlap(FSDPTest):
             # Share a stream so that all-gather and reduce-scatter block each
             # other like in `ProcessGroupNCCL`
             comm_stream.wait_stream(torch.xpu.current_stream())
-            with torch.xpu.stream(comm_stream):
-                torch.xpu._sleep(int(comm_sleep_ms * get_cycles_per_ms())) #zl_debug some skips here
+            #with torch.xpu.stream(comm_stream):
+            #    torch.xpu._sleep(int(comm_sleep_ms * get_cycles_per_ms())) #zl_debug some skips here
             torch.xpu.current_stream().wait_stream(comm_stream)
 
         def delayed_all_gather(*args, **kwargs):
