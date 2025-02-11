@@ -343,7 +343,7 @@ class Backend(str):
         Backend.backend_list.append(name.lower())
         if devices is not None:
             for device in devices:
-                if device != "cpu" and device != "cuda":
+                if device != "cpu" and device != "cuda" and device != "xpu":
                     Backend.default_device_backend_map[device] = name.lower()
         Backend.backend_type_map[name.lower()] = ProcessGroup.BackendType.CUSTOM
 
@@ -356,7 +356,7 @@ class Backend(str):
                 "`cuda`. Please specify it via the `devices` argument of "
                 "`register_backend`."
             )
-            Backend.backend_capability[name.lower()] = ["cpu", "cuda"]
+            Backend.backend_capability[name.lower()] = ["cpu", "cuda", "xpu"]
         elif isinstance(devices, str):
             # Single device string specified. Simply convert to list.
             Backend.backend_capability[name.lower()] = [devices]
