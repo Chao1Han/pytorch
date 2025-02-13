@@ -26,6 +26,7 @@ from torch.distributed.fsdp._flat_param import (
 )
 from torch.distributed.fsdp._init_utils import NO_RESHARD_AFTER_FORWARD_STRATEGIES
 from torch.distributed.fsdp.wrap import always_wrap_policy, ModuleWrapPolicy
+from torch.testing._internal.common_utils import TEST_XPU
 from torch.nn import TransformerDecoderLayer, TransformerEncoderLayer
 from torch.nn.parallel.distributed import DistributedDataParallel as DDP
 from torch.testing._internal.common_cuda import TEST_CUDA

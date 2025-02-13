@@ -53,12 +53,12 @@ class Net(nn.Module):
                     nn.ReLU(),
                     FSDP(
                         nn.Linear(16, 8),
-                        device_id=torch.accelerator.current_device(),
+                        device_id=torch.accelerator.current_device_index(),
                         sharding_strategy=sharding_strategy,
                         mixed_precision=mixed_precision,
                     ),
                 ),
-                device_id=torch.accelerator.current_device(),
+                device_id=torch.accelerator.current_device_index(),
                 sharding_strategy=sharding_strategy,
                 mixed_precision=mixed_precision,
             )
@@ -141,7 +141,7 @@ class TestCommunicationHooks(FSDPTest):
 
         net_default_hook = FSDP(
             net,
-            device_id=torch.accelerator.current_device(),
+            device_id=torch.accelerator.current_device_index(),
             sharding_strategy=sharding_strategy,
         ).to(self.rank)
 
@@ -178,7 +178,7 @@ class TestCommunicationHooks(FSDPTest):
         device = torch.device("xpu")
         return FSDP(
             core,
-            device_id=torch.accelerator.current_device(),
+            device_id=torch.accelerator.current_device_index(),
             sharding_strategy=sharding_strategy,
             mixed_precision=mixed_precision,
         ).to(device)
