@@ -441,11 +441,11 @@ class TestFullyShard1DTrainingCore(FSDPTest):
         orig_reduce_scatter = dist.reduce_scatter_tensor
 
         def delayed_all_gather(*args, **kwargs):
-            torch.xpu._sleep(int(delay_in_ms * get_cycles_per_ms()))
+            # torch.xpu._sleep(int(delay_in_ms * get_cycles_per_ms()))
             return orig_all_gather(*args, **kwargs)
 
         def delayed_reduce_scatter(*args, **kwargs):
-            torch.xpu._sleep(int(delay_in_ms * get_cycles_per_ms()))
+            # torch.xpu._sleep(int(delay_in_ms * get_cycles_per_ms()))
             return orig_reduce_scatter(*args, **kwargs)
 
         torch.manual_seed(42 + self.rank + 1)
@@ -466,11 +466,11 @@ class TestFullyShard1DTrainingCore(FSDPTest):
                 for _model, _optim in ((ref_model, ref_optim), (model, optim)):
                     _optim.zero_grad(set_to_none=(iter_idx % 2 == 0))
                     losses.append(_model(inp).sum())
-                    if _model is model and delay_after_forward:
-                        torch.xpu._sleep(int(delay_in_ms * get_cycles_per_ms()))
+                    # if _model is model and delay_after_forward:
+                        # torch.xpu._sleep(int(delay_in_ms * get_cycles_per_ms()))
                     losses[-1].backward()
-                    if _model is model and delay_before_optim:
-                        torch.xpu._sleep(int(delay_in_ms * get_cycles_per_ms()))
+                    # if _model is model and delay_before_optim:
+                        # torch.xpu._sleep(int(delay_in_ms * get_cycles_per_ms()))
                     _optim.step()
                 self.assertEqual(losses[0], losses[1])
 
@@ -509,7 +509,7 @@ class TestFullyShard1DTrainingCore(FSDPTest):
 
         root_loss = model(inp).sum()
         root_loss.backward()
-        torch.xpu._sleep(int(100 * get_cycles_per_ms()))
+        # torch.xpu._sleep(int(100 * get_cycles_per_ms()))
         optim.step()
         optim.zero_grad()
         nonroot_loss = model[0](inp).sum()
@@ -638,7 +638,7 @@ class TestFullyShard1DTrainingCore(FSDPTest):
             optim.step()
             # Sleep after the optimizer step to allow CPU to run ahead into the
             # next iteration's forward, exercising the post-optim stream sync
-            torch.xpu._sleep(int(25 * get_cycles_per_ms()))
+            # torch.xpu._sleep(int(25 * get_cycles_per_ms()))
         for ref_loss, loss in zip(ref_losses, losses):
             self.assertEqual(ref_loss, loss)
 

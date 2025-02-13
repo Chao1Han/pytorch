@@ -955,6 +955,8 @@ class DistributedTestBase(MultiProcessTestCase):
             return "nccl"
         elif "hpu" in device :   # intel gaudi
             return "hccl"
+        elif "xpu" in device:
+            return "xccl"
         else :
             return "gloo"
 
