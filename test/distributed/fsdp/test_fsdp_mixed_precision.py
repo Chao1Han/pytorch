@@ -89,7 +89,7 @@ mp_no_mixed_precision = MixedPrecision()
 if torch.cuda.is_available():
     nccl_supports_bf16 = dist.is_nccl_available() and nccl.version() >= (2, 10)
 elif torch.xpu.is_available():
-    nccl_supports_bf16 = dist.is_ccl_available()
+    nccl_supports_bf16 = dist.is_xccl_available()
 
 mp_configs = [default_mp, mp_only_reduce, mp_only_param_and_buf, mp_no_mixed_precision]
 if nccl_supports_bf16:
