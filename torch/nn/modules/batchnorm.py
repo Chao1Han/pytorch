@@ -780,6 +780,7 @@ class SyncBatchNorm(_BatchNorm):
             # currently only GPU/PrivateUse1 input is supported
             if input.device.type not in [
                 "cuda",
+                "xpu",
                 torch._C._get_privateuse1_backend_name(),
             ]:
                 raise ValueError(

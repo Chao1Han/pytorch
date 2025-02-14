@@ -1038,7 +1038,7 @@ class TestFSDPMixedPrecisionSharded(TestFSDPMixedPrecision):
         )
 
         # Check that we can run forward/backward without dtype errors
-        x = torch.randn(2, 3, 128, 128, device="cuda")
+        x = torch.randn(2, 3, 128, 128, device="xpu")
         out = model(x)
         out.mean().backward()
 
