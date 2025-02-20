@@ -784,7 +784,7 @@ class SyncBatchNorm(_BatchNorm):
                 torch._C._get_privateuse1_backend_name(),
             ]:
                 raise ValueError(
-                    "SyncBatchNorm expected input tensor to be on GPU or "
+                    "SyncBatchNorm expected input tensor to be on GPU or XPU or "
                     f"{torch._C._get_privateuse1_backend_name()}"
                 )
 

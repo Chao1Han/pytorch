@@ -28,7 +28,7 @@ from torch.testing._internal.common_distributed import (
 from torch.testing._internal.common_utils import (
     instantiate_parametrized_tests,
     parametrize,
-    requires_xpu,
+    requires_cuda,
     run_tests,
     skip_but_pass_in_sandcastle_if,
     skipIfRocm,
@@ -36,29 +36,29 @@ from torch.testing._internal.common_utils import (
 )
 
 
-def requires_xpu_p2p_access():
-    xpu_p2p_access_available = (
-        torch.xpu.is_available()
-        # and torch.xpu.get_device_capability() >= (8, 0)
-        and torch.xpu.device_count() >= 2
+def requires_cuda_p2p_access():
+    cuda_p2p_access_available = (
+        torch.cuda.is_available()
+        and torch.cuda.get_device_capability() >= (8, 0)
+        and torch.cuda.device_count() >= 2
     )
-    num_devices = torch.xpu.device_count()
-    # for i in range(num_devices - 1):
-    #     for j in range(i + 1, num_devices):
-    #         if not torch.xpu.can_device_access_peer(i, j):
-    #             xpu_p2p_access_available = False
-    #             break
-    #     if not xpu_p2p_access_available:
-    #         break
+    num_devices = torch.cuda.device_count()
+    for i in range(num_devices - 1):
+        for j in range(i + 1, num_devices):
+            if not torch.cuda.can_device_access_peer(i, j):
+                cuda_p2p_access_available = False
+                break
+        if not cuda_p2p_access_available:
+            break
 
     return skip_but_pass_in_sandcastle_if(
-        not xpu_p2p_access_available,
-        "xpu p2p access is not available",
+        not cuda_p2p_access_available,
+        "cuda p2p access is not available",
     )
 
 
 @instantiate_parametrized_tests
-@requires_xpu_p2p_access()
+@requires_cuda_p2p_access()
 class SymmetricMemoryTest(MultiProcessTestCase):
     def setUp(self) -> None:
         super().setUp()
@@ -70,13 +70,14 @@ class SymmetricMemoryTest(MultiProcessTestCase):
 
     @property
     def device(self) -> torch.device:
-        return torch.device(f"xpu:{self.rank}")
+        return torch.device(f"cuda:{self.rank}")
 
-    def _init_process(self):
-        torch.xpu.set_device(self.device)
+    def _init_process(self, set_device: bool = True):
+        if set_device:
+            torch.cuda.set_device(self.device)
         store = dist.FileStore(self.file_name, self.world_size)
         dist.init_process_group(
-            backend="xccl",
+            backend="nccl",
             world_size=self.world_size,
             rank=self.rank,
             store=store,
@@ -90,19 +91,19 @@ class SymmetricMemoryTest(MultiProcessTestCase):
 
     @skipIfRocm
     @skip_if_lt_x_gpu(2)
-    def test_xpu_nvlink_connectivity_detection(self) -> None:
+    def test_cuda_nvlink_connectivity_detection(self) -> None:
         from torch._C._distributed_c10d import _detect_dma_connectivity
 
         connectivity = _detect_dma_connectivity(DeviceType.CUDA, "nvlink")
         self.assertEqual(connectivity.device_type, DeviceType.CUDA)
         self.assertEqual(connectivity.connection_type, "nvlink")
-        self.assertEqual(len(connectivity.matrix), torch.xpu.device_count())
+        self.assertEqual(len(connectivity.matrix), torch.cuda.device_count())
         for row in connectivity.matrix:
-            self.assertEqual(len(row), torch.xpu.device_count())
+            self.assertEqual(len(row), torch.cuda.device_count())
 
     @skipIfRocm
     def test_large_alloc(self) -> None:
-        t = symm_mem.empty(2 * 1024**3, dtype=torch.uint8, device="xpu")
+        t = symm_mem.empty(2 * 1024**3, dtype=torch.uint8, device="cuda")
         self.assertEqual(t.numel() * t.element_size(), 2 * 1024**3)
 
     def _get_test_alloc_args(self):
@@ -142,8 +143,9 @@ class SymmetricMemoryTest(MultiProcessTestCase):
 
     @skipIfRocm
     @skip_if_lt_x_gpu(2)
-    def test_empty_strided_p2p(self) -> None:
-        self._init_process()
+    @parametrize("set_device", [True, False])
+    def test_empty_strided_p2p(self, set_device: bool) -> None:
+        self._init_process(set_device)
         enable_symm_mem_for_group(dist.group.WORLD.group_name)
 
         alloc_args = self._get_test_alloc_args()
@@ -160,8 +162,9 @@ class SymmetricMemoryTest(MultiProcessTestCase):
 
     @skipIfRocm
     @skip_if_lt_x_gpu(2)
-    def test_empty_strided_p2p_persistent(self) -> None:
-        self._init_process()
+    @parametrize("set_device", [True, False])
+    def test_empty_strided_p2p_persistent(self, set_device: bool) -> None:
+        self._init_process(set_device)
         enable_symm_mem_for_group(dist.group.WORLD.group_name)
 
         alloc_args = self._get_test_alloc_args()
@@ -190,7 +193,7 @@ class SymmetricMemoryTest(MultiProcessTestCase):
     def test_get_signal_pad(self) -> None:
         self._init_process()
 
-        t = symm_mem.empty(1, device="xpu")
+        t = symm_mem.empty(1, device="cuda")
         symm_mem_hdl = symm_mem.rendezvous(t, group=dist.group.WORLD)
         peer_rank = (self.rank + 1) % self.world_size
 
@@ -219,7 +222,7 @@ class SymmetricMemoryTest(MultiProcessTestCase):
         self.assertEqual(signal_pad.numel(), 64)
 
         # Sanity check that writes to buffer doesn't corrupt signal_pad
-        t = symm_mem.empty(0, device="xpu")
+        t = symm_mem.empty(0, device="cuda")
         symm_mem_hdl = symm_mem.rendezvous(t, group=dist.group.WORLD)
         signal_pad = symm_mem_hdl.get_signal_pad(self.rank)
         signal_pad.fill_(42)
@@ -233,15 +236,15 @@ class SymmetricMemoryTest(MultiProcessTestCase):
     def test_barrier_timeout(self) -> None:
         self._init_process()
 
-        t = symm_mem.empty(1, device="xpu")
+        t = symm_mem.empty(1, device="cuda")
         symm_mem_hdl = symm_mem.rendezvous(t, group=dist.group.WORLD)
 
         if self.rank == 0:
             with self.assertRaises(RuntimeError):
                 symm_mem_hdl.barrier(timeout_ms=1000)
-                torch.xpu.synchronize()
+                torch.cuda.synchronize()
         else:
-            torch.xpu.synchronize()
+            torch.cuda.synchronize()
 
         # The device-side timeout triggers a __trap() that causes all
         # subsequent host/device interactions to result in an "unspecified
@@ -254,7 +257,7 @@ class SymmetricMemoryTest(MultiProcessTestCase):
     def test_put_signal_timeout(self) -> None:
         self._init_process()
 
-        t = symm_mem.empty(1, device="xpu")
+        t = symm_mem.empty(1, device="cuda")
         symm_mem_hdl = symm_mem.rendezvous(t, group=dist.group.WORLD)
 
         if self.rank == 0:
@@ -263,9 +266,9 @@ class SymmetricMemoryTest(MultiProcessTestCase):
                 # doesn't wait on this signal, the subsequent put will timeout.
                 symm_mem_hdl.put_signal(dst_rank=1)
                 symm_mem_hdl.put_signal(dst_rank=1, timeout_ms=1000)
-                torch.xpu.synchronize()
+                torch.cuda.synchronize()
         else:
-            torch.xpu.synchronize()
+            torch.cuda.synchronize()
 
         # The device-side timeout triggers a __trap() that causes all
         # subsequent host/device interactions to result in an "unspecified
@@ -278,15 +281,15 @@ class SymmetricMemoryTest(MultiProcessTestCase):
     def test_wait_signal_timeout(self) -> None:
         self._init_process()
 
-        t = symm_mem.empty(1, device="xpu")
+        t = symm_mem.empty(1, device="cuda")
         symm_mem_hdl = symm_mem.rendezvous(t, group=dist.group.WORLD)
 
         if self.rank == 0:
             with self.assertRaises(RuntimeError):
                 symm_mem_hdl.wait_signal(src_rank=1, timeout_ms=1000)
-                torch.xpu.synchronize()
+                torch.cuda.synchronize()
         else:
-            torch.xpu.synchronize()
+            torch.cuda.synchronize()
 
         # The device-side timeout triggers a __trap() that causes all
         # subsequent host/device interactions to result in an "unspecified
@@ -295,17 +298,17 @@ class SymmetricMemoryTest(MultiProcessTestCase):
         os._exit(0)
 
     @skipIfRocm
-    @requires_xpu
+    @requires_cuda
     def test_allow_overlapping_devices(self) -> None:
         os.environ["TORCH_SYMM_MEM_ALLOW_OVERLAPPING_DEVICES"] = "1"
         store = dist.FileStore(self.file_name, self.world_size)
         dist.init_process_group(
-            backend="xccl",
+            backend="nccl",
             world_size=self.world_size,
             rank=self.rank,
             store=store,
         )
-        t = symm_mem.empty(64, device="xpu:0")
+        t = symm_mem.empty(64, device="cuda:0")
         symm_mem_hdl = symm_mem.rendezvous(t, group=dist.group.WORLD)
 
         self.assertEqual(symm_mem_hdl.rank, self.rank)
@@ -334,8 +337,8 @@ class SymmetricMemoryTest(MultiProcessTestCase):
         rank = self.rank
 
         torch.manual_seed(42 + rank)
-        A_shard = torch.rand(BATCH, M // self.world_size, K, device="xpu")
-        Bs = [torch.rand(K, N, device="xpu") for _ in range(3)]
+        A_shard = torch.rand(BATCH, M // self.world_size, K, device="cuda")
+        Bs = [torch.rand(K, N, device="cuda") for _ in range(3)]
 
         ag_output_0, mm_outputs_0 = _fused_all_gather_matmul_fallback(
             A_shard, Bs, gather_dim=gather_dim, group_name=group.group_name
@@ -383,13 +386,13 @@ class SymmetricMemoryTest(MultiProcessTestCase):
             ).normal_()
         else:
             A_shard = torch.rand(
-                M // self.world_size, K, dtype=torch.bfloat16, device="xpu"
+                M // self.world_size, K, dtype=torch.bfloat16, device="cuda"
             )
 
         if is_b_row_major:
-            B = torch.rand(K, N, dtype=torch.bfloat16, device="xpu")
+            B = torch.rand(K, N, dtype=torch.bfloat16, device="cuda")
         else:
-            B = torch.rand(N, K, dtype=torch.bfloat16, device="xpu").t()
+            B = torch.rand(N, K, dtype=torch.bfloat16, device="cuda").t()
 
         ag_baseline, mm_baseline = _fused_all_gather_matmul_fallback(
             A_shard, [B], gather_dim=0, group_name=group_name
@@ -427,10 +430,10 @@ class SymmetricMemoryTest(MultiProcessTestCase):
 
         torch.manual_seed(42 + self.rank)
         A_shard = torch.rand(
-            M // self.world_size, K, dtype=torch.bfloat16, device="xpu"
+            M // self.world_size, K, dtype=torch.bfloat16, device="cuda"
         )
 
-        B = torch.rand(K, N, dtype=torch.bfloat16, device="xpu")
+        B = torch.rand(K, N, dtype=torch.bfloat16, device="cuda")
 
         ag_baseline, mm_baseline = _fused_all_gather_matmul_fallback(
             A_shard, [B], gather_dim=0, group_name=group_name, return_A=False
@@ -479,22 +482,22 @@ class SymmetricMemoryTest(MultiProcessTestCase):
             raise AssertionError("Invalid scale_mode: {scale_mode}")
 
         torch.manual_seed(42 + rank)
-        A_shard = torch.rand(*leading_dims, K, device="xpu").to(torch.float8_e4m3fn)
+        A_shard = torch.rand(*leading_dims, K, device="cuda").to(torch.float8_e4m3fn)
         Bs = [
-            torch.rand(N, K, device="xpu").to(torch.float8_e4m3fn).T for _ in range(3)
+            torch.rand(N, K, device="cuda").to(torch.float8_e4m3fn).T for _ in range(3)
         ]
 
         if scale_mode == "tensor-wise":
-            A_scale = torch.tensor(0.1, device="xpu")
-            B_scales = [torch.tensor(0.1, device="xpu") for _ in range(3)]
+            A_scale = torch.tensor(0.1, device="cuda")
+            B_scales = [torch.tensor(0.1, device="cuda") for _ in range(3)]
             out_dtypes = [None, torch.bfloat16, torch.float32]
         elif scale_mode == "row-wise-sharded":
-            A_scale = torch.full((*leading_dims, 1), 0.1, device="xpu")
-            B_scales = [torch.full((1, N), 0.1, device="xpu") for _ in range(3)]
+            A_scale = torch.full((*leading_dims, 1), 0.1, device="cuda")
+            B_scales = [torch.full((1, N), 0.1, device="cuda") for _ in range(3)]
             out_dtypes = [torch.bfloat16] * 3
         elif scale_mode == "row-wise-replicated":
-            A_scale = torch.full((BATCH, M, 1), 0.1, device="xpu")
-            B_scales = [torch.full((1, N), 0.1, device="xpu") for _ in range(3)]
+            A_scale = torch.full((BATCH, M, 1), 0.1, device="cuda")
+            B_scales = [torch.full((1, N), 0.1, device="cuda") for _ in range(3)]
             out_dtypes = [torch.bfloat16] * 3
         else:
             raise AssertionError(f"Invalid scale_mode: {scale_mode}")
@@ -556,8 +559,8 @@ class SymmetricMemoryTest(MultiProcessTestCase):
         rank = self.rank
 
         torch.manual_seed(42 + rank)
-        A = torch.rand(BATCH, M, K, device="xpu")
-        B = torch.rand(K, N, device="xpu")
+        A = torch.rand(BATCH, M, K, device="cuda")
+        B = torch.rand(K, N, device="cuda")
 
         output_0 = _fused_matmul_reduce_scatter_fallback(
             A, B, "avg", scatter_dim=scatter_dim, group_name=group.group_name
@@ -588,15 +591,15 @@ class SymmetricMemoryTest(MultiProcessTestCase):
         rank = self.rank
 
         torch.manual_seed(42 + rank)
-        A = torch.rand(BATCH, M, K, device="xpu").to(torch.float8_e4m3fn)
-        B = torch.rand(N, K, device="xpu").to(torch.float8_e4m3fn).T
+        A = torch.rand(BATCH, M, K, device="cuda").to(torch.float8_e4m3fn)
+        B = torch.rand(N, K, device="cuda").to(torch.float8_e4m3fn).T
 
         if rowwise:
-            A_scale = torch.full((BATCH, M, 1), 0.1, device="xpu")
-            B_scale = torch.full((1, N), 0.1, device="xpu")
+            A_scale = torch.full((BATCH, M, 1), 0.1, device="cuda")
+            B_scale = torch.full((1, N), 0.1, device="cuda")
         else:
-            A_scale = torch.tensor(0.1, device="xpu")
-            B_scale = torch.tensor(0.1, device="xpu")
+            A_scale = torch.tensor(0.1, device="cuda")
+            B_scale = torch.tensor(0.1, device="cuda")
 
         output_0 = _fused_scaled_matmul_reduce_scatter_fallback(
             A,
@@ -704,7 +707,7 @@ class SymmetricMemoryTest(MultiProcessTestCase):
 
 
 @instantiate_parametrized_tests
-@requires_xpu_p2p_access()
+@requires_cuda_p2p_access()
 class SubgroupTest(MultiProcessTestCase):
     def setUp(self) -> None:
         super().setUp()
@@ -716,13 +719,13 @@ class SubgroupTest(MultiProcessTestCase):
 
     @property
     def device(self) -> torch.device:
-        return torch.device(f"xpu:{self.rank}")
+        return torch.device(f"cuda:{self.rank}")
 
     def _init_process(self):
-        torch.xpu.set_device(self.device)
+        torch.cuda.set_device(self.device)
         store = dist.FileStore(self.file_name, self.world_size)
         dist.init_process_group(
-            backend="xccl",
+            backend="nccl",
             world_size=self.world_size,
             rank=self.rank,
             store=store,
@@ -741,7 +744,7 @@ class SubgroupTest(MultiProcessTestCase):
         world = dist.group.WORLD
         subgroup = subgroup_0 if world.rank() < world.size() // 2 else subgroup_1
 
-        t = symm_mem.empty(64, device="xpu")
+        t = symm_mem.empty(64, device="cuda")
         symm_mem_world = symm_mem.rendezvous(t, group=world)
         symm_mem_subgroup = symm_mem.rendezvous(t, group=subgroup)
 
@@ -769,7 +772,7 @@ class SubgroupTest(MultiProcessTestCase):
 
 @skipIfRocm
 @instantiate_parametrized_tests
-@requires_xpu_p2p_access()
+@requires_cuda_p2p_access()
 class SymmMemCollectiveTest(MultiProcessTestCase):
     def setUp(self) -> None:
         super().setUp()
@@ -782,13 +785,13 @@ class SymmMemCollectiveTest(MultiProcessTestCase):
 
     @property
     def device(self) -> torch.device:
-        return torch.device(f"xpu:{self.rank}")
+        return torch.device(f"cuda:{self.rank}")
 
     def _init_process(self):
-        torch.xpu.set_device(self.device)
+        torch.cuda.set_device(self.device)
         store = dist.FileStore(self.file_name, self.world_size)
         dist.init_process_group(
-            backend="xccl",
+            backend="nccl",
             world_size=self.world_size,
             rank=self.rank,
             store=store,
@@ -950,7 +953,7 @@ class SymmMemCollectiveTest(MultiProcessTestCase):
 
 
 @instantiate_parametrized_tests
-@requires_xpu_p2p_access()
+@requires_cuda_p2p_access()
 class LoweringTest(MultiProcessTestCase):
     def setUp(self) -> None:
         super().setUp()
@@ -962,13 +965,13 @@ class LoweringTest(MultiProcessTestCase):
 
     @property
     def device(self) -> torch.device:
-        return torch.device(f"xpu:{self.rank}")
+        return torch.device(f"cuda:{self.rank}")
 
     def _init_process(self):
-        torch.xpu.set_device(self.device)
+        torch.cuda.set_device(self.device)
         store = dist.FileStore(self.file_name, self.world_size)
         dist.init_process_group(
-            backend="xccl",
+            backend="nccl",
             world_size=self.world_size,
             rank=self.rank,
             store=store,
@@ -1035,14 +1038,14 @@ class LoweringTest(MultiProcessTestCase):
 
 class SymmMemSingleProcTest(TestCase):
     @skipIfRocm
-    @requires_xpu
-    # @skipIf(
-    #     _get_torch_xpu_version() < (12, 0),
-    #     "stream_write_value32 currently only supports xpu version>=12.0",
-    # )
+    @requires_cuda
+    @skipIf(
+        _get_torch_cuda_version() < (12, 0),
+        "stream_write_value32 currently only supports cuda version>=12.0",
+    )
     def test_stream_write_value32(self):
-        tensor = torch.zeros(4, dtype=torch.uint32, device="xpu")
-        expect = torch.tril(torch.ones(4, 4, device="xpu")).to(torch.uint32)
+        tensor = torch.zeros(4, dtype=torch.uint32, device="cuda")
+        expect = torch.tril(torch.ones(4, 4, device="cuda")).to(torch.uint32)
 
         for i in range(4):
             _SymmetricMemory.stream_write_value32(tensor, i, 1)
@@ -1055,13 +1058,13 @@ class SymmMemSingleProcTest(TestCase):
             _SymmetricMemory.stream_write_value32(tensor, offset=0, val=4294967296)
 
     @skipIfRocm
-    @requires_xpu
+    @requires_cuda
     def test_memset32(self):
         t = _SymmetricMemory.empty_strided_p2p(
             (64,),
             (1,),
             dtype=torch.uint32,
-            device=torch.device("xpu:0"),
+            device=torch.device("cuda:0"),
             group_name="0",
         ).fill_(0)
 
