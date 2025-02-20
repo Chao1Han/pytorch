@@ -19,7 +19,7 @@ from torch.distributed.tensor._random import (
 )
 from torch.distributed.tensor.debug import CommDebugMode
 from torch.distributed.tensor.parallel import ColwiseParallel, parallelize_module
-from torch.testing._internal.common_utils import run_tests, TEST_HPU
+from torch.testing._internal.common_utils import run_tests, TEST_HPU, TEST_XPU
 from torch.testing._internal.distributed._tensor.common_dtensor import (
     DTensorTestBase,
     skip_if_lt_x_gpu,
@@ -27,8 +27,12 @@ from torch.testing._internal.distributed._tensor.common_dtensor import (
     with_comms,
 )
 
-
-TYPE_DEVICE = "hpu" if TEST_HPU else "cuda"
+if TEST_XPU:
+    TYPE_DEVICE = "xpu"
+elif TEST_HPU:
+    TYPE_DEVICE = "hpu"
+else:
+    TYPE_DEVICE = "cuda"
 
 
 class DistTensorRandomInitTest(DTensorTestBase):
@@ -94,7 +98,7 @@ class DistTensorRandomInitTest(DTensorTestBase):
         # torch random generator keeps different seeds on ranks. This ensures
         # that Replicate DTensor will have the same initialized results
         # across ranks.
-        torch.cuda.manual_seed(self.rank)
+        torch.xpu.manual_seed(self.rank)
         device_mesh = DeviceMesh(self.device_type, torch.arange(self.world_size))
         size = [1024, 2048]
         meta_dtensor = distribute_tensor(
@@ -161,7 +165,7 @@ class DistTensorRandomInitTest(DTensorTestBase):
             self.assertEqual(model.weight.device, torch.device("meta"))
 
         # actual initialization
-        device = torch.device("cuda", torch.cuda.current_device())
+        device = torch.device("xpu", torch.xpu.current_device())
         model.to_empty(device=device)
         model.reset_parameters()
         self.assertTrue(
@@ -212,7 +216,7 @@ class DistTensorRandomInitTest(DTensorTestBase):
             self.assertEqual(model.weight.device, torch.device("meta"))
 
         # actual initialization
-        device = torch.device("cuda", torch.cuda.current_device())
+        device = torch.device("xpu", torch.xpu.current_device())
         model.to_empty(device=device)
         model.reset_parameters()
         self.assertTrue(
@@ -552,7 +556,7 @@ class DistTensorRandomOpsTest3D(DTensorTestBase):
             self.assertEqual(model.weight.device, torch.device("meta"))
 
         # actual initialization
-        device = torch.device("cuda", torch.cuda.current_device())
+        device = torch.device("xpu", torch.xpu.current_device())
         model.to_empty(device=device)
         model.reset_parameters()
         self.assertTrue(
