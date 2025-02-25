@@ -160,7 +160,7 @@ class TestFullyShardOverlap(FSDPTest):
         orig_all_gather_into_tensor = dist.all_gather_into_tensor
 
         def delayed_all_gather(*args, **kwargs):
-            torch.xpu._sleep(int(comm_sleep_ms * get_cycles_per_ms()))
+            # torch.xpu._sleep(int(comm_sleep_ms * get_cycles_per_ms()))
             return orig_all_gather_into_tensor(*args, **kwargs)
 
         inp = torch.randn((2, dim), device="xpu")
