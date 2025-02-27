@@ -15,10 +15,10 @@ from torch.distributed.pipelining import (
     ScheduleGPipe,
 )
 from torch.distributed.pipelining._utils import PipeliningShapeError
-from torch.testing._internal.common_cuda import TEST_MULTIGPU
+# from torch.testing._internal.common_cuda import TEST_MULTIGPU
 from torch.testing._internal.common_distributed import (
     MultiProcContinousTest,
-    requires_nccl,
+    requires_xccl,
 )
 from torch.testing._internal.common_utils import (
     instantiate_parametrized_tests,
@@ -33,7 +33,7 @@ batch_size = 256
 chunks = 4
 
 torch.manual_seed(0)
-
+TEST_MULTIGPU = torch.xpu.device_count() >= 2
 
 def get_dtype_change_hook(new_dtype):
     """A simple hook for simulating mixed precision"""
@@ -63,7 +63,7 @@ class StageTest(MultiProcContinousTest):
     @classmethod
     def backend_str(cls) -> str:
         # Testing with NCCL backend
-        return "nccl"
+        return "xccl"
 
     @classmethod
     def setUpClass(cls):
@@ -72,10 +72,10 @@ class StageTest(MultiProcContinousTest):
         Set up the device.
         """
         super().setUpClass()
-        dev_id = cls.rank % torch.cuda.device_count()
-        cls.device = torch.device(f"cuda:{dev_id}")
+        dev_id = cls.rank % torch.xpu.device_count()
+        cls.device = torch.device(f"xpu:{dev_id}")
 
-    @requires_nccl()
+    @requires_xccl()
     @skip_but_pass_in_sandcastle_if(not TEST_MULTIGPU, "NCCL test requires 2+ GPUs")
     @parametrize("ModelClass", [ExampleCode, MultiMLP])
     def test_tracer(self, ModelClass):
@@ -140,7 +140,7 @@ class StageTest(MultiProcContinousTest):
             with self.assertRaisesRegex(PipeliningShapeError, "dtype mismatch"):
                 _run_step(x)
 
-    @requires_nccl()
+    @requires_xccl()
     @skip_but_pass_in_sandcastle_if(not TEST_MULTIGPU, "NCCL test requires 2+ GPUs")
     @parametrize("ModelClass", [ModelWithKwargs])
     def test_tracer_kwargs(self, ModelClass):
@@ -189,7 +189,7 @@ class StageTest(MultiProcContinousTest):
         old_keys = mod.state_dict().keys()
         assert all(k in old_keys for k in submod_keys)
 
-    @requires_nccl()
+    @requires_xccl()
     @skip_but_pass_in_sandcastle_if(not TEST_MULTIGPU, "NCCL test requires 2+ GPUs")
     def test_manual(self):
         full_mod = MultiMLP(d_hid, n_layers=self.world_size)
@@ -238,7 +238,7 @@ class StageTest(MultiProcContinousTest):
             with self.assertRaisesRegex(PipeliningShapeError, "dtype mismatch"):
                 _run_step(x)
 
-    @requires_nccl()
+    @requires_xccl()
     @skip_but_pass_in_sandcastle_if(not TEST_MULTIGPU, "NCCL test requires 2+ GPUs")
     def test_custom_dw_with_fb_schedule(self):
         """Tests that separate weight grad function 'dw_runner' gets run under a schedule that's only aware of F/B."""
@@ -302,7 +302,7 @@ class StageTest(MultiProcContinousTest):
             with self.assertRaisesRegex(PipeliningShapeError, "shape mismatch"):
                 _run_step(torch.randn(batch_size + 1, d_hid, device=self.device))
 
-    @requires_nccl()
+    @requires_xccl()
     @skip_but_pass_in_sandcastle_if(not TEST_MULTIGPU, "NCCL test requires 2+ GPUs")
     def test_custom_dw_errors(self):
         """Tests expected errors are raised"""
@@ -327,8 +327,8 @@ if __name__ == "__main__":
     # Check if GPU and NCCL are available
     if not (
         dist.is_available()
-        and dist.is_nccl_available()
-        and torch.cuda.device_count() > 1
+        and dist.is_xccl_available()
+        and torch.xpu.device_count() > 1
     ):
         print(
             "c10d NCCL not available or not enough GPUs, skipping tests",

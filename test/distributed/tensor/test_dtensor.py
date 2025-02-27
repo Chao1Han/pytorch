@@ -971,8 +971,8 @@ class TestDTensorPlacementTypes(DTensorTestBase):
         # Keep everything deterministic.
         torch.manual_seed(0)
         tensor = torch.rand(size)
-        if self.device_type == "cuda":
-            return tensor.cuda()
+        if self.device_type == "xpu":
+            return tensor.xpu()
         else:
             return tensor
 
@@ -1030,7 +1030,7 @@ class TestDTensorPlacementTypes(DTensorTestBase):
 
 class DTensorLogTest(LoggingTestCase):
     def test_dtensor_log(self):
-        if not torch.distributed.is_available() or not torch.cuda.is_available():
+        if not torch.distributed.is_available() or not torch.xpu.is_available():
             return
 
         env = dict(os.environ)
@@ -1046,7 +1046,7 @@ import logging
 import torch
 from torch.distributed._tensor import  init_device_mesh, distribute_tensor, Shard
 
-mesh = init_device_mesh("cuda", (1,), mesh_dim_names=("dp",))
+mesh = init_device_mesh("xpu", (1,), mesh_dim_names=("dp",))
 placements = [Shard(0)]
 tensor = torch.randn(12, 8, 8)
 dtensor = distribute_tensor(tensor, mesh, placements)
