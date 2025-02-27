@@ -1046,7 +1046,7 @@ import logging
 import torch
 from torch.distributed._tensor import  init_device_mesh, distribute_tensor, Shard
 
-mesh = init_device_mesh("cuda", (1,), mesh_dim_names=("dp",))
+mesh = init_device_mesh("xpu", (1,), mesh_dim_names=("dp",))
 placements = [Shard(0)]
 tensor = torch.randn(12, 8, 8)
 dtensor = distribute_tensor(tensor, mesh, placements)
