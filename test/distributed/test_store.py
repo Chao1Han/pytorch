@@ -51,7 +51,7 @@ else:
 
 DEFAULT_HOSTNAME = "localhost"
 
-torch.backends.cuda.matmul.allow_tf32 = False
+# torch.backends.xpu.matmul.allow_tf32 = False
 
 
 def gpus_for_rank(world_size):
@@ -60,8 +60,8 @@ def gpus_for_rank(world_size):
     On a single node, all visible GPUs are evenly
     divided to subsets, each process only uses a subset.
     """
-    visible_devices = list(range(torch.cuda.device_count()))
-    gpus_per_process = torch.cuda.device_count() // world_size
+    visible_devices = list(range(torch.xpu.device_count()))
+    gpus_per_process = torch.xpu.device_count() // world_size
     gpus_for_rank = []
     for rank in range(world_size):
         gpus_for_rank.append(
@@ -1092,7 +1092,7 @@ class TestClientProtocol(TestCase):
 
 if __name__ == "__main__":
     assert (
-        not torch.cuda._initialized
+        not torch.xpu._initialized
     ), "test_distributed must not have initialized CUDA context on main process"
 
     run_tests()

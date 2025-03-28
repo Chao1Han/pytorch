@@ -208,7 +208,7 @@ class TestCollectives(TestCase):
 
 if __name__ == "__main__":
     assert (
-        not torch.cuda._initialized
-    ), "test_distributed must not have initialized CUDA context on main process"
+        not (torch.cuda._initialized or torch.xpu._initialized)
+    ), "test_distributed must not have initialized GPU context on main process"
 
     run_tests()

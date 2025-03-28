@@ -44,6 +44,7 @@ from torch.testing._internal.common_utils import (
     TestCase,
     run_tests,
     TEST_HPU,
+    TEST_XPU,
 )
 from torch.testing._internal.distributed.multi_threaded_pg import (
     _install_threaded_pg,
@@ -84,6 +85,7 @@ TEST_SKIPS = {
     ),
     "importerror": TestSkip(88, "Test skipped due to missing import"),
     "no_accelerator": TestSkip(89, "accelerator is not available."),
+    "not-support-multithread": TestSkip(90, "backend not support multithread."),
 }
 
 
@@ -91,20 +93,22 @@ TEST_SKIPS = {
 class DistTestCases:
     # Backends that do not support a specific collective
     skip_collective = {}
-    skip_collective["allgather_coalesced"] = {"nccl", "mpi", "ucc"}
+    skip_collective["allgather_coalesced"] = {"nccl", "mpi", "ucc", "xccl"}
     skip_collective["reduce"] = set()
-    skip_collective["sendrecv anysource"] = {"nccl", "ucc"}
-    skip_collective["cpu barrier"] = {"nccl", "ucc"}
+    skip_collective["sendrecv anysource"] = {"nccl", "ucc", "xccl"}
+    skip_collective["cpu barrier"] = {"nccl", "ucc", "xccl"}
 
     # Sets showing that something is implemented
     backend_feature = {}
     backend_feature["gpu"] = {"nccl", "gloo", "ucc"}
     backend_feature["cuda"] = {"nccl", "gloo", "ucc"}
     backend_feature["ddp"] = {"nccl", "gloo", "ucc"}
-    backend_feature["subgroup"] = {"nccl", "gloo", "ucc"}
+    backend_feature["subgroup"] = {"nccl", "gloo", "ucc", "xccl"}
     backend_feature["plugin"] = set()
     if TEST_HPU:
         backend_feature["hpu"] = {"hccl"}
+    if TEST_XPU:
+        backend_feature["xpu"] = {"xccl"}
 
 
 def skip_if_no_gpu(func):
@@ -120,6 +124,8 @@ def skip_if_no_gpu(func):
             sys.exit(TEST_SKIPS[f"multi-gpu-{world_size}"].exit_code)
         if TEST_HPU and torch.hpu.device_count < world_size:
             sys.exit(TEST_SKIPS[f"multi-gpu-{world_size}"].exit_code)
+        if TEST_XPU and torch.xpu.device_count < world_size:
+            sys.exit(TEST_SKIPS[f"multi-xpu-{world_size}"].exit_code)
 
         return func(*args, **kwargs)
 
@@ -198,6 +204,8 @@ def skip_if_lt_x_gpu(x):
             if torch.cuda.is_available() and torch.cuda.device_count() >= x:
                 return func(*args, **kwargs)
             if TEST_HPU and torch.hpu.device_count() >= x:
+                return func(*args, **kwargs)
+            if TEST_XPU and torch.xpu.device_count() >= x:
                 return func(*args, **kwargs)
             sys.exit(TEST_SKIPS[f"multi-gpu-{x}"].exit_code)
 
@@ -335,6 +343,12 @@ def requires_nccl():
     return skip_but_pass_in_sandcastle_if(
         not c10d.is_nccl_available(),
         "c10d was not compiled with the NCCL backend",
+    )
+
+def requires_xccl():
+    return skip_but_pass_in_sandcastle_if(
+        not c10d.is_xccl_available(),
+        "c10d was not compiled with the XCCL backend",
     )
 
 def requires_ucc():
@@ -510,7 +524,8 @@ def init_multigpu_helper(world_size: int, backend: str):
     nGPUs = torch.cuda.device_count()
     if TEST_HPU:
         nGPUs = torch.hpu.device_count()
-
+    if TEST_XPU:
+        nGPUs = torch.xpu.device_count()
     visible_devices = range(nGPUs)
 
     # If rank is less than or equal to number of available GPU's
@@ -941,6 +956,8 @@ class DistributedTestBase(MultiProcessTestCase):
             return "nccl"
         elif "hpu" in device :   # intel gaudi
             return "hccl"
+        elif "xpu" in device:
+            return "xccl"
         else :
             return "gloo"
 
@@ -953,8 +970,8 @@ class DistributedTestBase(MultiProcessTestCase):
             rank=self.rank,
             store=store
         )
-        if "nccl" in self.backend(device):
-            torch.cuda.set_device(self.rank)
+        if "nccl" or "xccl" in self.backend(device):
+            torch.accelerator.set_device_index(self.rank)
         return torch.distributed.distributed_c10d._get_default_group()
 
     def rank_to_device(self, device):
@@ -1347,7 +1364,7 @@ def _dynamo_dist_per_rank_init(rank, world_size, init_pg=True, fake_pg=False):
     # To avoid multiple inheritance from _dynamo.test_case.TestCase and MultiProcessTestCase,
     # Just manually implement the most important part of the dynamo behavior to reset/clear.
     if not fake_pg:
-        torch.cuda.set_device(rank)
+        torch.accelerator.set_device_index(rank)
     os.environ['MASTER_ADDR'] = 'localhost'
     os.environ['MASTER_PORT'] = '6789'
     if init_pg:

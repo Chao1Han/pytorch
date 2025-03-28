@@ -18,6 +18,7 @@ from torch.testing._internal.common_utils import (
     skipIfHpu,
     TEST_CUDA,
     TEST_HPU,
+    TEST_XPU,
     TEST_WITH_DEV_DBG_ASAN,
 )
 
@@ -33,6 +34,8 @@ if TEST_HPU:
     DEVICE = "hpu"
 elif TEST_CUDA:
     DEVICE = "cuda"
+elif TEST_XPU:
+    DEVICE = "xpu"
 else:
     DEVICE = "cpu"
 
@@ -159,7 +162,7 @@ class TestObjectCollectives(DistributedTestBase):
         self.assertEqual(ranks[0], out_list[0])
 
 
-devices = ("cpu", "cuda", "hpu")
-instantiate_device_type_tests(TestObjectCollectives, globals(), only_for=devices)
+devices = ("cpu", "cuda", "hpu", "xpu")
+instantiate_device_type_tests(TestObjectCollectives, globals(), only_for=devices, allow_xpu=True)
 if __name__ == "__main__":
     run_tests()

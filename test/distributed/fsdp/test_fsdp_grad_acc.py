@@ -134,7 +134,7 @@ class TestGradAcc(FSDPTest):
             deterministic=True,
             add_bn=False,  # disable BN since the test uses varying batch sizes
         )
-        device = torch.device("cuda")
+        device = torch.device("xpu")
         optim = torch.optim.SGD(
             fsdp_model.parameters(),
             lr=0.01,

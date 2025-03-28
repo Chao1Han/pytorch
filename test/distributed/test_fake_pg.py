@@ -25,7 +25,7 @@ if not dist.is_available():
     print("Distributed not available, skipping tests", file=sys.stderr)
     sys.exit(0)
 
-HAS_CUDA = torch.cuda.is_available()
+HAS_CUDA = torch.xpu.is_available()
 
 
 class TestFakePG(TestCase):
@@ -65,16 +65,16 @@ class TestFakePG(TestCase):
     def test_construct_fsdp(self):
         store = FakeStore()
         dist.init_process_group(backend="fake", rank=0, world_size=2, store=store)
-        FSDP(nn.Linear(2, 3, device="cuda"))
+        FSDP(nn.Linear(2, 3, device="xpu"))
 
     @unittest.skipIf(not HAS_CUDA, "No CUDA")
     def test_fsdp_fake_e2e(self):
         store = dist.HashStore()
         dist.init_process_group(backend="fake", rank=0, world_size=2, store=store)
         my_module = nn.Sequential(
-            nn.Linear(2, 3, device="cuda"),
+            nn.Linear(2, 3, device="xpu"),
             nn.ReLU(),
-            nn.Linear(3, 2, device="cuda"),
+            nn.Linear(3, 2, device="xpu"),
         )
         sharded_module = FSDP(my_module, use_orig_params=True)
         optim = torch.optim.Adam(sharded_module.parameters(), lr=0.0001)
@@ -94,7 +94,7 @@ class TestFakePG(TestCase):
         def allgather_fn(tensor):
             return funcol.all_gather_tensor(tensor, 0, default_pg)
 
-        gm = make_fx(allgather_fn)(torch.randn(2, 2, device="cuda"))
+        gm = make_fx(allgather_fn)(torch.randn(2, 2, device="xpu"))
         FileCheck().check("all_gather").check("wait_tensor").run(str(gm.graph))
 
     def test_broadcast(self):
@@ -174,9 +174,9 @@ class TestFakePG(TestCase):
             backend="fake", rank=0, world_size=world_size, store=store
         )
 
-        device_mesh = DeviceMesh("cuda", torch.arange(0, world_size).view(-1, tp_size))
+        device_mesh = DeviceMesh("xpu", torch.arange(0, world_size).view(-1, tp_size))
         device_mesh = init_device_mesh(
-            "cuda", (world_size // tp_size, tp_size), mesh_dim_names=["dp", "tp"]
+            "xpu", (world_size // tp_size, tp_size), mesh_dim_names=["dp", "tp"]
         )
 
         sequence_parallelize_plan = {
@@ -189,7 +189,7 @@ class TestFakePG(TestCase):
         }
         for parallel_plan in [sequence_parallelize_plan, pairwise_parallelize_plan]:
             my_module = parallelize_module(
-                MLPModule(device="cuda"),
+                MLPModule(device="xpu"),
                 device_mesh["tp"],
                 parallel_plan,
             )
@@ -202,7 +202,7 @@ class TestFakePG(TestCase):
             for i in range(10):
                 dp_rank = dist.get_rank()
                 torch.manual_seed(i + dp_rank)
-                input = torch.randn(20, 10).cuda(dist.get_rank())
+                input = torch.randn(20, 10).xpu(dist.get_rank())
                 x = sharded_module(input)
                 loss = x.sum()
                 loss.backward()

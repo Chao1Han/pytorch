@@ -23,7 +23,7 @@ _rng_tracker: Optional["_RNGStateTracker"] = None
 
 def is_rng_supported_mesh(device_mesh: DeviceMesh) -> bool:
     """Checks if the current device of ``device_mesh`` supports DTensor's random APIs.
-    Currently DTensor Random APIs only supports cuda/cuda-like devices. We suggest
+    Currently DTensor Random APIs only supports xpu/xpu-like devices. We suggest
     users call this API to test the availability before using our random APIs.
 
     Args:
@@ -34,7 +34,7 @@ def is_rng_supported_mesh(device_mesh: DeviceMesh) -> bool:
         A bool value. True if ``device_mesh`` supports DTensor Random APIs; False otherwise.
 
     .. warning::
-        Currently we only support correct RNG on cuda/cuda-like devices.
+        Currently we only support correct RNG on xpu/xpu-like devices.
     """
     device_handle = _get_device_handle(device_mesh.device_type)
     if device_handle and hasattr(device_handle, "set_rng_state"):
@@ -71,7 +71,7 @@ def manual_seed(seed: int, device_mesh: DeviceMesh) -> None:
     device_handle = _get_device_handle(device_mesh.device_type)
     if not device_handle:
         raise NotImplementedError(
-            f"DTensor randomness only supports cuda/cuda-like device type, but got {device_mesh.device_type}"
+            f"DTensor randomness only supports xpu/xpu-like device type, but got {device_mesh.device_type}"
         )
 
     # instantiate a RNG tracker if haven't. By default DTensor uses an
@@ -102,7 +102,7 @@ class _RNGStateTracker:
     a random op (an operator that calls RNG).
     """
 
-    def __init__(self, device_type: str = "cuda"):
+    def __init__(self, device_type: str = "xpu"):
         self._device_type = device_type
         self._device_handle = _get_device_handle(device_type)
         if not (self._device_handle and self._device_handle.is_available()):
@@ -161,7 +161,7 @@ class OffsetBasedRNGTracker(_RNGStateTracker):
     random operators.
     """
 
-    def __init__(self, device_type: str = "cuda", run_state_sync: bool = True):
+    def __init__(self, device_type: str = "xpu", run_state_sync: bool = True):
         super().__init__(device_type)
         rng_state = self._device_handle.get_rng_state().to(device_type)
         if run_state_sync:
@@ -328,7 +328,7 @@ class OffsetBasedRNGTracker(_RNGStateTracker):
         current_offset = self.get_offset("parallel-rng")
 
         # pytorch: offset must be multiple of 4
-        # source: aten/src/ATen/cuda/CUDAGeneratorImpl.cpp
+        # source: aten/src/ATen/xpu/CUDAGeneratorImpl.cpp
         offset_incr = (shard_linear_idx * local_size + 3) // 4 * 4
         self.set_offset("parallel-rng", current_offset + offset_incr)
 
@@ -351,7 +351,7 @@ class OffsetBasedRNGTracker(_RNGStateTracker):
 
         numel = prod(dtensor_shape)
         # pytorch: offset must be multiple of 4
-        # source: aten/src/ATen/cuda/CUDAGeneratorImpl.cpp
+        # source: aten/src/ATen/xpu/CUDAGeneratorImpl.cpp
         numel = (numel + 3) // 4 * 4
         self.set_offset("parallel-rng", old_offset + numel)
 
