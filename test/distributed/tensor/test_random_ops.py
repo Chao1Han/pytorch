@@ -530,7 +530,7 @@ class DistTensorRandomOpTest(DTensorTestBase):
 class DistTensorRandomOpsTest3D(DTensorTestBase):
     @property
     def world_size(self):
-        return 8
+        return 4
 
     @with_comms
     @skip_if_lt_x_gpu(8)

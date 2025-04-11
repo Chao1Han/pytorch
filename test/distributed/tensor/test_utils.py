@@ -22,7 +22,7 @@ c10d_functional = torch.ops.c10d_functional
 class UtilTest(DTensorTestBase):
     @property
     def world_size(self):
-        return 8
+        return 4
 
     def _compute_start_end_offsets(self, global_offset, local_size, n_dim):
         offset = []

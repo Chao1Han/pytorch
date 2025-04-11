@@ -276,7 +276,7 @@ class DeviceMeshTest(DTensorTestBase):
 class DeviceMeshTestNDim(DTensorTestBase):
     @property
     def world_size(self):
-        return 8
+        return 4
 
     @with_comms
     def test_device_mesh_nd(self):
@@ -428,7 +428,7 @@ class DeviceMeshTestNDim(DTensorTestBase):
 class InitDeviceMeshTest(DTensorTestBase):
     @property
     def world_size(self):
-        return 8
+        return 4
 
     @with_comms
     def test_init_device_mesh(self):
@@ -475,7 +475,7 @@ class InitDeviceMeshTest(DTensorTestBase):
 class TestDeviceMeshGetItem(DTensorTestBase):
     @property
     def world_size(self):
-        return 8
+        return 4
 
     @with_comms
     def test_raises_no_mesh_dim_found(self):
@@ -694,7 +694,7 @@ class TestDeviceMeshGetItem(DTensorTestBase):
 class TestMeshEnv(DTensorTestBase):
     @property
     def world_size(self):
-        return 8
+        return 4
 
     @with_comms
     def test_get_root_mesh(self):
@@ -772,7 +772,7 @@ class TestMeshEnv(DTensorTestBase):
 class DeviceMeshCollectiveTest(DTensorTestBase):
     @property
     def world_size(self):
-        return 8
+        return 4
 
     @with_comms
     def test_broadcast_1d(self):

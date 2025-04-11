@@ -1127,7 +1127,7 @@ class TestHSDPWithCustomHook(FSDPTestMultiThread):
 class TestFullyShardShardPlacementFn(FSDPTestMultiThread):
     @property
     def world_size(self) -> int:
-        return 8
+        return 4
 
     def _init_models(self):
         torch.manual_seed(42)

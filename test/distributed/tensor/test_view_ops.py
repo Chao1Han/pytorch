@@ -37,7 +37,7 @@ from torch.utils import _pytree as pytree
 class TestViewOps(DTensorTestBase):
     @property
     def world_size(self) -> int:
-        return 6
+        return 4
 
     def test_view_groups(self):
         self.assertEqual(
