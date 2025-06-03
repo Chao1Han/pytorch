@@ -1902,6 +1902,8 @@ def _new_process_group_helper(
             # backend so we can correctly call getDefaultBackend which in ProcessGroup.
             if Backend.NCCL in backend_config.get_device_backend_map().values():
                 pg._set_default_backend(ProcessGroup.BackendType.NCCL)
+            elif Backend.XCCL in backend_config.get_device_backend_map().values():
+                pg._set_default_backend(ProcessGroup.BackendType.XCCL)
             else:
                 pg._set_default_backend(ProcessGroup.BackendType.GLOO)
         else:
@@ -1911,6 +1913,8 @@ def _new_process_group_helper(
     else:
         if Backend.NCCL in backend_config.device_backend_map.values():
             pg._set_default_backend(ProcessGroup.BackendType.NCCL)
+        elif Backend.XCCL in backend_config.device_backend_map.values():
+            pg._set_default_backend(ProcessGroup.BackendType.XCCL)
         elif Backend._plugins.keys():
             custom_backend = next(iter(Backend._plugins.keys()))
             if custom_backend in backend_config.device_backend_map.values():
