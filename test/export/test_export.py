@@ -417,11 +417,12 @@ class TestDynamismExpression(TestCase):
 
         inputs = (torch.arange(10), torch.tensor(2))
 
-        # Without transforming the unbacked int expression, we can't export.
-        with self.assertRaisesRegex(
-            RuntimeError, escape("Could not guard on data-dependent expression")
-        ):
-            export(Module(identity), inputs, strict=True)
+        # See https://github.com/pytorch/pytorch/issues/154574
+        # # Without transforming the unbacked int expression, we can't export.
+        # with self.assertRaisesRegex(
+        #     RuntimeError, escape("Could not guard on data-dependent expression")
+        # ):
+        #     export(Module(identity), inputs, strict=True)
 
         # It works if we transform the whole unbacked int expression into
         # an unbacked int.
@@ -569,6 +570,70 @@ class TestExport(TestCase):
                 self.assertTrue(node.target == torch.ops.aten.linear.default)
 
         self.assertEqual(counter, 1)
+
+    def test_from_node_metadata_export(self):
+        class Foo(torch.nn.Module):
+            def __init__(self) -> None:
+                super().__init__()
+                self.conv1d = torch.nn.Conv1d(3, 3, 3)
+                self.conv2d = torch.nn.Conv2d(3, 3, 3)
+
+            def forward(self, x):
+                x = self.conv2d(x)
+                x = x.squeeze(0)
+                x = self.conv1d(x)
+                return x
+
+            def example_inputs(self):
+                return
+
+        f = Foo()
+        inputs = (torch.randn(1, 3, 5, 5),)
+        gm = export(f, inputs).module()
+        from torch.fx.traceback import NodeSourceAction
+
+        for node in gm.graph.nodes:
+            if node.op in ("placeholder", "output"):
+                continue
+            if "weight" in node.name or "bias" in node.name:
+                self.assertTrue(
+                    node.meta["from_node"][-1].pass_name
+                    == "ExportedProgram.module().unlift()"
+                )
+                self.assertTrue(
+                    node.meta["from_node"][-1].action
+                    == [NodeSourceAction.CREATE, NodeSourceAction.REPLACE]
+                )
+            else:
+                self.assertTrue(
+                    node.meta["from_node"][-1].pass_name == "ExportedProgram.module()"
+                )
+                self.assertTrue(
+                    node.meta["from_node"][-1].action == [NodeSourceAction.CREATE]
+                )
+
+        ## re-export
+        gm2 = export(gm, inputs).module()
+
+        for node in gm2.graph.nodes:
+            if node.op in ("placeholder", "output"):
+                continue
+            if "weight" in node.name or "bias" in node.name:
+                self.assertTrue(
+                    node.meta["from_node"][-1].pass_name
+                    == "ExportedProgram.module().unlift()"
+                )
+                self.assertTrue(
+                    node.meta["from_node"][-1].action
+                    == [NodeSourceAction.CREATE, NodeSourceAction.REPLACE]
+                )
+            else:
+                self.assertTrue(
+                    node.meta["from_node"][-1].pass_name == "ExportedProgram.module()"
+                )
+                self.assertTrue(
+                    node.meta["from_node"][-1].action == [NodeSourceAction.CREATE]
+                )
 
     def test_bincount(self):
         class M(torch.nn.Module):
@@ -11913,6 +11978,26 @@ def forward(self, x, b_t, y):
         self.assertEqual(mod.foo, ep.module().foo)
         self.assertEqual(mod(torch.ones(4, 4)), ep.module()(torch.ones(4, 4)))
 
+    def test_unbacked_scalar_constructor(self):
+        class Foo(torch.nn.Module):
+            def forward(self, u, zuf, b):
+                return (
+                    torch.tensor([u.item()]),
+                    torch.tensor([zuf.item()]),
+                    torch.tensor([b.item()]),
+                )
+
+        mod = Foo()
+        inps = (torch.tensor([3]), torch.tensor([3.14]), torch.tensor([True]))
+        ep = torch.export.export(mod, inps)
+        for eager_out, ep_out in zip(mod(*inps), ep.module()(*inps)):
+            self.assertTrue(torch.allclose(eager_out, ep_out))
+
+        # test with other inputs
+        inps = (torch.tensor([5]), torch.tensor([-1.2]), torch.tensor([False]))
+        for eager_out, ep_out in zip(mod(*inps), ep.module()(*inps)):
+            self.assertTrue(torch.allclose(eager_out, ep_out))
+
     def test_symint_tensor_return(self):
         class Module(torch.nn.Module):
             def forward(self, x):
@@ -12892,6 +12977,33 @@ graph():
         ):
             ep.module()(torch.randn(10), torch.tensor(2))
 
+    @testing.expectedFailureCppSerDes  # TODO: When we deserialize we somehow hardcode sympy.lower to 2
+    @testing.expectedFailureSerDerNonStrict
+    @testing.expectedFailureSerDer
+    @torch.fx.experimental._config.patch(backed_size_oblivious=True)
+    def test_baddbmm(self):
+        class M(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.weight = torch.nn.Parameter(
+                    torch.randn(64, 64, 192, dtype=torch.float16)
+                )
+                self.bias = torch.nn.Parameter(
+                    torch.randn(64, 1, 192, dtype=torch.float16)
+                )
+
+            def forward(self, x):
+                return torch.ops.aten.baddbmm.default(self.bias, x, self.weight)
+
+        x1 = torch.randn(64, 2048, 64, dtype=torch.float16)
+        x2 = torch.randn(64, 1, 64, dtype=torch.float16)
+        m = M()
+
+        ep = export(m, (x2,), dynamic_shapes=({1: Dim("batch")},))
+
+        self.assertTrue(torch.allclose(m(x2), ep.module()(x2)))
+        self.assertTrue(torch.allclose(m(x1), ep.module()(x1)))
+
     @testing.expectedFailureLegacyExportNonStrict  # Old export doesn't work with subclasses
     @testing.expectedFailureLegacyExportStrict  # Old export doesn't work with subclasses
     @testing.expectedFailureSerDerNonStrict  # construtor is not serialized today
@@ -13351,6 +13463,25 @@ def forward(self, x):
         inp2 = torch.randn(7, 4)
         self.assertTrue(torch.allclose(comp_mod(inp1), mod(inp1)))
         self.assertTrue(torch.allclose(comp_mod(inp2), mod(inp2)))
+
+    @torch.fx.experimental._config.patch(backed_size_oblivious=True)
+    def test_repeat_interleave(self):
+        class M(torch.nn.Module):
+            def forward(self, values, batch_sizes):
+                return torch.repeat_interleave(
+                    torch.arange(
+                        values.shape[0],
+                    ),
+                    batch_sizes,
+                )
+
+        inp = (torch.randint(0, 10, (1, 3)), torch.randint(0, 10, (1,)))
+        ep = torch.export.export(
+            M(), inp, dynamic_shapes=({0: Dim("dim")}, {0: Dim("dim")})
+        )
+        self.assertTrue(torch.allclose(M()(*inp), ep.module()(*inp)))
+        inp = (torch.randint(0, 10, (2, 3)), torch.randint(0, 10, (2,)))
+        self.assertTrue(torch.allclose(M()(*inp), ep.module()(*inp)))
 
     def test_automatic_dynamic_shapes_simple_equality(self):
         # The next 3 test cases tests for automatic dynamic shapes specs, verifying that automatic dynamism

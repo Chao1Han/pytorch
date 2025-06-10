@@ -398,7 +398,7 @@ use_numpy_random_stream = False
 enable_cpp_guard_manager = True
 
 # Use C++ guard manger for symbolic shapes
-enable_cpp_symbolic_shape_guards = not is_fbcode()
+enable_cpp_symbolic_shape_guards = False
 
 # Enable tracing through contextlib.contextmanager
 enable_trace_contextlib = True
@@ -614,6 +614,9 @@ run_gc_after_compile = Config(  # type: ignore[var-annotated]
 # Takes the function/module decorated with torch.compile and passes it through a
 # wrapper. This ensures that nn.module hooks are also compiled in the same frame.
 wrap_top_frame = False
+
+# record pre-graph bytecode in profile traces
+record_pre_graph_bytecode_in_traces = True
 
 # HACK: this is for testing custom ops profiling only
 _custom_ops_profile: Optional[Any] = None

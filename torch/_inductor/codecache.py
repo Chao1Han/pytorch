@@ -10,6 +10,7 @@ import importlib.resources
 import io
 import itertools
 import json
+import logging
 import os
 import pickle
 import pkgutil
@@ -151,7 +152,7 @@ _IS_WINDOWS = sys.platform == "win32"
 LOCK_TIMEOUT = 600
 
 output_code_log = torch._logging.getArtifactLogger(__name__, "output_code")
-log = torch._logging.getArtifactLogger(__name__, "codecache")
+log = logging.getLogger(__name__)
 
 
 def use_re_build() -> bool:
@@ -406,7 +407,7 @@ def get_path(
 def get_hash(
     content: Union[str, bytes], extra: str = "", hash_type: str = "code"
 ) -> str:
-    if hash_type in {"amdgcn", "code", "ptx"}:
+    if hash_type in {"amdgcn", "code", "ptx", "spv"}:
         return code_hash(content, extra)
     if hash_type in {"cubin", "hsaco", "spv"}:
         return code_hash(repr(content))
@@ -881,7 +882,7 @@ class FxGraphHashDetails:
         # Also hash on various system info (including the triton compiler version).
         self.torch_version = torch_key()
         self.system_info = CacheBase.get_system()
-        self.inductor_config = config.save_config_portable(ignore_private_configs=False)
+        self.inductor_config = config.save_config_portable()
         # Custom post grad passes should provide an ID to hash.
         self.post_grad_custom_pre_pass = self._get_custom_pass_detail(
             config.post_grad_custom_pre_pass
@@ -889,36 +890,6 @@ class FxGraphHashDetails:
         self.post_grad_custom_post_pass = self._get_custom_pass_detail(
             config.post_grad_custom_post_pass
         )
-        self._pre_fusion_custom_pass = self._get_custom_pass_detail_unsafe(
-            config._pre_fusion_custom_pass
-        )
-        self._fuse_ddp_communication_passes = self._get_custom_pass_detail_unsafe(
-            config._fuse_ddp_communication_passes
-        )
-
-    # This is mainly added to handle these two inductor configs, which are (unfortunately)
-    # sometimes cache safe:
-    # - _pre_fusion_custom_pass
-    # - _fuse_ddp_communication_passes
-    # Their types can be found in `torch/_inductor/config.py`, but:
-    # - if they are string names, we can cache them safely (one is by default)
-    # - if any of them are set to custom callables, we will need to cache miss
-    # Future work is for someone to find any places where these functions are used
-    # and force them to be of type CustomGraphPass, so we can guarantee serialization.
-    def _get_custom_pass_detail_unsafe(self, custom_pass: Any) -> Optional[Any]:
-        if not custom_pass:
-            return None
-        if isinstance(custom_pass, list):
-            return [self._get_custom_pass_detail_unsafe(x) for x in custom_pass]
-        if isinstance(custom_pass, str):
-            return custom_pass
-        if isinstance(custom_pass, CustomGraphPass):
-            return custom_pass.uuid()
-        if callable(custom_pass):
-            # Returning None is safe here because we raise an explicit bypass error
-            # later if we detect these passes are set to callables
-            return None
-        raise AssertionError(f"unknown config type: {str(type(custom_pass))}")
 
     def _get_custom_pass_detail(
         self, custom_pass: CustomGraphPassType
@@ -1396,14 +1367,6 @@ class FxGraphCache(GuardedCache[CompiledFxGraph]):
         for p in (config.post_grad_custom_pre_pass, config.post_grad_custom_post_pass):
             if p and (not isinstance(p, CustomGraphPass) or not p.uuid()):
                 raise BypassFxGraphCache("Unsupported post grad custom pass")
-        # We should find any users of _pre_fusion_custom_pass and _fuse_ddp_communication_passes
-        # and ensure they are not passing us raw callables
-        if config._pre_fusion_custom_pass is not None:
-            if not isinstance(config._pre_fusion_custom_pass, CustomGraphPass):
-                raise BypassFxGraphCache("Unsupported _pre_fusion_custom_pass")
-        for p in config._fuse_ddp_communication_passes:
-            if callable(p) and not isinstance(p, CustomGraphPass):
-                raise BypassFxGraphCache("Unsupported _fuse_ddp_communication_pass")
 
         # Freezing can embed constants that wouldn't be static across runs.
         if has_frozen_params(gm) and not torch._utils_internal.justknobs_check(
@@ -1613,9 +1576,12 @@ class CudaKernelParamCache:
         basename, _ = get_name_and_dir_from_output_file_path(bin_path)
 
         if config.aot_inductor.emit_multi_arch_kernel:
-            assert bin_type == "cubin", "emit_multi_arch_kernel only supported in CUDA"
+            bin_type_to_ext = {"cubin": ".fatbin", "spv": ".spv"}
+            assert bin_type in bin_type_to_ext.keys(), (
+                "multi_arch_kernel_binary only supported in CUDA/XPU"
+            )
             base_path, _ = os.path.splitext(bin_path)
-            bin_path = base_path + ".fatbin"
+            bin_path = base_path + bin_type_to_ext[bin_type]
 
         asm_path: str = ""
         if (
@@ -1649,6 +1615,10 @@ class CudaKernelParamCache:
 
 
 class AotCodeCompiler:
+    """
+    Compile AOT Inductor generated code.
+    """
+
     @classmethod
     def compile(
         cls,
@@ -1710,6 +1680,7 @@ class AotCodeCompiler:
             "wrapper.cpp",
             extra=cpp_command,
             specified_dir=specified_output_path,
+            key=config.aot_inductor.model_name_for_generated_files,
         )
         kernel_code = (
             f"// Triton kernels are embedded as comments in {wrapper_path}\n"
@@ -1720,6 +1691,7 @@ class AotCodeCompiler:
             "kernel.cpp",
             extra=cpp_command,
             specified_dir=specified_output_path,
+            key=config.aot_inductor.model_name_for_generated_files,
         )
 
         # Log the AOTInductor wrapper and kernel code, if needed.
@@ -2091,7 +2063,7 @@ class AotCodeCompiler:
                     asm_files.append(asm_file)
 
                 cubin_file = value[get_cpp_wrapper_cubin_path_name()]
-                if config.aot_inductor.emit_multi_arch_kernel:
+                if config.aot_inductor.emit_multi_arch_kernel and device_type == "cuda":
                     current_arch = _nvcc_arch_as_compile_option()
                     cmd = (
                         f"{_cuda_compiler()} -fatbin {asm_file} -o {cubin_file} "
@@ -3295,6 +3267,8 @@ class PyCodeCache:
         cls, path: str, lineno: int
     ) -> Optional[list[dict[str, Any]]]:
         if path not in cls.linemaps:
+            return None
+        if len(cls.linemaps[path]) == 0:
             return None
         # [(starting_line, <fx node>), ...]
         lines, nodes = cls.linemaps[path]
