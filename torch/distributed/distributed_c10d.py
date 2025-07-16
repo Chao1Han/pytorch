@@ -2035,8 +2035,18 @@ def _new_process_group_helper(
         elif backend_str == Backend.XCCL:
             if not is_xccl_available():
                 raise RuntimeError("Distributed package doesn't have XCCL built in")
+            if backend_options is not None:
+                assert isinstance(backend_options, ProcessGroupXCCL.Options), (
+                    "Expected backend_options argument to be of type ProcessGroupXCCL.Options"
+                )
+            else:
+                # default backend_options for XCCL
+                backend_options = ProcessGroupXCCL.Options()
+                backend_options.is_high_priority_stream = False
+            backend_options.global_ranks_in_group = global_ranks_in_group
+            backend_options.group_name = group_name
             backend_class = ProcessGroupXCCL(
-                backend_prefix_store, group_rank, group_size
+                backend_prefix_store, group_rank, group_size, backend_options
             )
             backend_type = ProcessGroup.BackendType.XCCL
         else:
@@ -5044,7 +5054,7 @@ def split_group(
         )
 
     parent_group_rank = parent_global_to_group_ranks[global_rank]
-    parent_backend = parent_pg._get_backend(torch.device("cuda"))
+    parent_backend = parent_pg._get_backend(device_id)
 
     # if the parent backend does not support splitting, raise error
     # currently this API only support NCCL backend
@@ -5125,6 +5135,15 @@ def split_group(
         backend_class = ProcessGroupNCCL(
             prefix_store, group_rank, len(my_group), pg_options
         )
+    elif parent_backend_str == Backend.XCCL:
+        backend_type = ProcessGroup.BackendType.XCCL
+        if not isinstance(pg_options, ProcessGroupXCCL.Options):
+            raise RuntimeError(
+                "Expected pg_options argument to be of type ProcessGroupXCCL.Options"
+            )
+        backend_class = ProcessGroupXCCL(
+            prefix_store, group_rank, len(my_group), pg_options
+        )
     else:
         assert parent_backend_str.upper() in Backend._plugins, (
             f"Unknown c10d backend type {parent_backend_str.upper()}"
@@ -5145,7 +5164,9 @@ def split_group(
     pg._set_default_backend(backend_type)
     backend_class._set_sequence_number_for_group()
 
-    pg._register_backend(torch.device("cuda"), backend_type, backend_class)
+    pg._register_backend(
+        torch.accelerator.current_accelerator(), backend_type, backend_class
+    )
 
     # set group_name and group_desc to backend
     assert group_name is not None

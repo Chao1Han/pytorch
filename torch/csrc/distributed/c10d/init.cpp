@@ -3477,17 +3477,73 @@ Example::
           .def(
               py::init([](const c10::intrusive_ptr<::c10d::Store>& store,
                           int rank,
-                          int size) {
+                          int size,
+                          c10::intrusive_ptr<::c10d::ProcessGroupXCCL::Options>
+                              options) {
                 // gil_scoped_release is not safe as a call_guard in init.
                 // https://github.com/pybind/pybind11/issues/5473
                 py::gil_scoped_release nogil{};
 
                 return c10::make_intrusive<::c10d::ProcessGroupXCCL>(
-                    store, rank, size);
+                    store, rank, size, std::move(options));
               }),
               py::arg("store"),
               py::arg("rank"),
-              py::arg("size"));
+              py::arg("size"),
+              py::arg("options"),
+              R"(Create a new ProcessGroupXCCL instance.)")
+          .def(
+              py::init([](const c10::intrusive_ptr<::c10d::Store>& store,
+                          int rank,
+                          int size) {
+                // gil_scoped_release is not safe as a call_guard in init.
+                // https://github.com/pybind/pybind11/issues/5473
+                py::gil_scoped_release nogil{};
+
+                auto options = ::c10d::ProcessGroupXCCL::Options::create();
+                options->is_high_priority_stream = false;
+                return c10::make_intrusive<::c10d::ProcessGroupXCCL>(
+                    store, rank, size, options);
+              }),
+              py::arg("store"),
+              py::arg("rank"),
+              py::arg("size"),
+              R"(Create a new ProcessGroupXCCL instance.)")
+          .def(
+              "comm_split_count",
+              &::c10d::ProcessGroupXCCL::getCommSplitCounter)
+          .def_property_readonly(
+              "options",
+              &::c10d::ProcessGroupXCCL::getOptions,
+              R"(Return the options used to create this ProcessGroupXCCL instance.)")
+          .def_property(
+              "bound_device_id",
+              &::c10d::ProcessGroupXCCL::getBoundDeviceId,
+              &::c10d::ProcessGroupXCCL::setBoundDeviceId,
+              R"(Return the bound device id.)")
+          .def(
+              "perform_nocolor_split",
+              &::c10d::ProcessGroupXCCL::performNocolorSplit)
+          .def(
+              "_is_initialized",
+              &::c10d::ProcessGroupXCCL::isInitialized,
+              py::call_guard<py::gil_scoped_release>());
+  intrusive_ptr_class_<::c10d::ProcessGroupXCCL::Options>(
+      processGroupXCCL, "Options", backendOptions)
+      .def(py::init<bool>(), py::arg("is_high_priority_stream") = false)
+      .def_readwrite("config", &::c10d::ProcessGroupXCCL::Options::config)
+      .def_readwrite(
+          "is_high_priority_stream",
+          &::c10d::ProcessGroupXCCL::Options::is_high_priority_stream)
+      .def_readwrite(
+          "split_from", &::c10d::ProcessGroupXCCL::Options::split_from)
+      .def_readwrite(
+          "split_color", &::c10d::ProcessGroupXCCL::Options::split_color)
+      .def_readwrite(
+          "global_ranks_in_group",
+          &::c10d::ProcessGroupXCCL::Options::global_ranks_in_group)
+      .def_readwrite(
+          "group_name", &::c10d::ProcessGroupXCCL::Options::group_name);
 #endif
 
 #ifdef USE_C10D_UCC
