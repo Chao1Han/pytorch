@@ -5052,7 +5052,7 @@ def split_group(
         )
 
     parent_group_rank = parent_global_to_group_ranks[global_rank]
-    parent_backend = parent_pg._get_backend(torch.device("cuda"))
+    parent_backend = parent_pg._get_backend(device_id)
 
     # if the parent backend does not support splitting, raise error
     # currently this API only support NCCL backend
@@ -5133,6 +5133,15 @@ def split_group(
         backend_class = ProcessGroupNCCL(
             prefix_store, group_rank, len(my_group), pg_options
         )
+    elif parent_backend_str == Backend.XCCL:
+        backend_type = ProcessGroup.BackendType.XCCL
+        if not isinstance(pg_options, ProcessGroupXCCL.Options):
+            raise RuntimeError(
+                "Expected pg_options argument to be of type ProcessGroupXCCL.Options"
+            )
+        backend_class = ProcessGroupXCCL(
+            prefix_store, group_rank, len(my_group), pg_options
+        )
     else:
         assert parent_backend_str.upper() in Backend._plugins, (
             f"Unknown c10d backend type {parent_backend_str.upper()}"
@@ -5153,7 +5162,9 @@ def split_group(
     pg._set_default_backend(backend_type)
     backend_class._set_sequence_number_for_group()
 
-    pg._register_backend(torch.device("cuda"), backend_type, backend_class)
+    pg._register_backend(
+        torch.accelerator.current_accelerator(), backend_type, backend_class
+    )
 
     # set group_name and group_desc to backend
     assert group_name is not None

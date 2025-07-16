@@ -3380,17 +3380,38 @@ Example::
                 py::gil_scoped_release nogil{};
 
                 return c10::make_intrusive<::c10d::ProcessGroupXCCL>(
-                    store, rank, size);
+                    store, rank, size, std::move(options));
               }),
               py::arg("store"),
               py::arg("rank"),
               py::arg("size"),
               py::arg("options"),
               R"(Create a new ProcessGroupXCCL instance.)")
-            .def(
+          .def(
+              py::init([](const c10::intrusive_ptr<::c10d::Store>& store,
+                          int rank,
+                          int size) {
+                // gil_scoped_release is not safe as a call_guard in init.
+                // https://github.com/pybind/pybind11/issues/5473
+                py::gil_scoped_release nogil{};
+
+                auto options = ::c10d::ProcessGroupXCCL::Options::create();
+                options->is_high_priority_stream = false;
+                return c10::make_intrusive<::c10d::ProcessGroupXCCL>(
+                    store, rank, size, options);
+              }),
+              py::arg("store"),
+              py::arg("rank"),
+              py::arg("size"),
+              R"(Create a new ProcessGroupXCCL instance.)")
+          .def(
               "comm_split_count",
               &::c10d::ProcessGroupXCCL::getCommSplitCounter)
-            .def_property(
+          .def_property_readonly(
+              "options",
+              &::c10d::ProcessGroupXCCL::getOptions,
+              R"(Return the options used to create this ProcessGroupXCCL instance.)")
+          .def_property(
               "bound_device_id",
               &::c10d::ProcessGroupXCCL::getBoundDeviceId,
               &::c10d::ProcessGroupXCCL::setBoundDeviceId,
@@ -3398,14 +3419,12 @@ Example::
           .def(
               "perform_nocolor_split",
               &::c10d::ProcessGroupXCCL::performNocolorSplit)
-        .def(
+          .def(
               "_is_initialized",
               &::c10d::ProcessGroupXCCL::isInitialized,
               py::call_guard<py::gil_scoped_release>());
   intrusive_ptr_class_<::c10d::ProcessGroupXCCL::Options>(
-      processGroupXCCL,
-      "Options",
-      backendOptions)
+      processGroupXCCL, "Options", backendOptions)
       .def(py::init<bool>(), py::arg("is_high_priority_stream") = false)
       .def_readwrite("config", &::c10d::ProcessGroupXCCL::Options::config)
       .def_readwrite(
