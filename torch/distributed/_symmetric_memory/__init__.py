@@ -106,7 +106,7 @@ def get_symm_mem_workspace(group_name: str, min_size: int) -> _SymmetricMemory:
     tensor = _group_name_to_workspace_tensor.get(group_name)
     size = tensor.numel() * tensor.element_size() if tensor is not None else 0
     if tensor is None or size < min_size:
-        if False: #torch.cuda.is_current_stream_capturing():
+        if False:  # torch.cuda.is_current_stream_capturing():
             curr_size = 0 if tensor is None else tensor.numel() * tensor.element_size()
             raise RuntimeError(
                 f"get_symm_mem_workspace(): the requested size ({min_size} bytes) "
@@ -252,8 +252,8 @@ def _pipelined_multi_all_gather_and_consume(
     # prevent suboptimal scenarios, we are giving up the chance to overlap "mv"
     # and "b" with the first shard_consumer for now.
     copy_shard(dst=local_p2p_bufs, src=shard)
-    #torch.xpu.synchronize()
-    #print(f"[Python] zl_debug copy shard tensor to local done {local_p2p_bufs} with shape {local_p2p_bufs.shape}", flush=True)
+    # torch.xpu.synchronize()
+    # print(f"[Python] zl_debug copy shard tensor to local done {local_p2p_bufs} with shape {local_p2p_bufs.shape}", flush=True)
     # symm_mem.barrier(channel=1)
     dist.barrier()
     backend_stream.wait_stream(torch.xpu.current_stream())
@@ -334,7 +334,9 @@ def _pipelined_produce_and_all2all(
         dist.all_to_all_single(output=output, input=torch.cat(chunks))
     """
     out_chunks = output.chunk(c10d._get_group_size_by_name(group_name))
-    p2p_workspace_size_req = out_chunks[0].numel() * out_chunks[0].element_size() * dist.get_world_size()
+    p2p_workspace_size_req = (
+        out_chunks[0].numel() * out_chunks[0].element_size() * dist.get_world_size()
+    )
     symm_mem = get_symm_mem_workspace(group_name, min_size=p2p_workspace_size_req)
     group_size = symm_mem.world_size
     rank = symm_mem.rank
@@ -354,8 +356,7 @@ def _pipelined_produce_and_all2all(
         remote_rank = (rank - step) % group_size
         producer_rank = (rank + step) % group_size
         p2p_buf = get_p2p_buf(rank, producer_rank)
-        remote_p2p_buf = get_p2p_buf(remote_rank, rank
-                                     )
+        remote_p2p_buf = get_p2p_buf(remote_rank, rank)
         if step % 2 == 0:
             stream = torch.xpu.current_stream()
         else:
@@ -368,7 +369,9 @@ def _pipelined_produce_and_all2all(
             dist.barrier()
             # replaced with copy_buffer
             # out_chunks[remote_rank].copy_(remote_p2p_buf)
-            symm_mem.copy_buffer(remote_p2p_buf, out_chunks[remote_rank], remote_p2p_buf.numel())
+            symm_mem.copy_buffer(
+                remote_p2p_buf, out_chunks[remote_rank], remote_p2p_buf.numel()
+            )
             # The local P2P buffer can only be overwritten by the next
             # chunk_producer after all peers have finished reading from it.
             # symm_mem.barrier(channel=step % 2)
@@ -380,6 +383,7 @@ def _pipelined_produce_and_all2all(
     torch.xpu.current_stream().wait_stream(backend_stream)
     # symm_mem.barrier(channel=0)
     dist.barrier()
+
 
 lib = torch.library.Library("symm_mem", "DEF")  # noqa: TOR901
 lib.define(
