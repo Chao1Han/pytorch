@@ -263,16 +263,29 @@ def _pipelined_multi_all_gather_and_consume(
     # remote shards.
     shard_consumer(shard, rank)
 
-    for step in range(1, group_size):
-        if step % 2 == 0:
-            stream = torch.xpu.current_stream()
-        else:
-            stream = backend_stream
-        remote_rank = (step + rank) % group_size
-        remote_p2p_bufs = get_p2p_bufs(remote_rank)
+    # for step in range(1, group_size):
+    #     if step % 2 == 0:
+    #         stream = torch.xpu.current_stream()
+    #     else:
+    #         stream = backend_stream
+    #     remote_rank = (step + rank) % group_size
+    #     remote_p2p_bufs = get_p2p_bufs(remote_rank)
+    #     with stream:
+    #         copy_shard(dst=shards[remote_rank], src=remote_p2p_bufs)
+    #         shard_consumer(shards[remote_rank], remote_rank)
+
+    stage_size = 2
+    for stage in range(1, group_size, stage_size):
+        stream = torch.xpu.current_stream() if (stage // stage_size) % 2 == 0 else backend_stream
         with stream:
-            copy_shard(dst=shards[remote_rank], src=remote_p2p_bufs)
-            shard_consumer(shards[remote_rank], remote_rank)
+            for i in range(stage_size):
+                step = stage + i
+                if step >= group_size:
+                    break
+                remote_rank = (step + rank) % group_size
+                remote_p2p_bufs = get_p2p_bufs(remote_rank)
+                copy_shard(dst=shards[remote_rank], src=remote_p2p_bufs)
+                shard_consumer(shards[remote_rank], remote_rank)
 
     if ag_out_needed:
         # Copy from input to the all-gather output. Opportunistically overlap
@@ -1722,7 +1735,7 @@ def is_nvshmem_available() -> bool:
     return _is_nvshmem_available()
 
 
-def set_backend(name: Literal["NVSHMEM", "CUDA", "NCCL"]) -> None:
+def set_backend(name: Literal["NVSHMEM", "CUDA", "NCCL", "XCCL"]) -> None:
     r"""
     Set the backend for symmetric memory allocation. This is a global setting
     and affects all subsequent calls to
