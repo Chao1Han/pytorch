@@ -1376,7 +1376,7 @@ def _maybe_convert_scalar_types_to_dtypes(
 class Work(_Work):
     def __init__(self) -> None:
         super().__init__()
-        self.event = torch.cuda.Event()
+        self.event = torch.xpu.Event()
         self.event.record()
 
     def wait(self, timeout: timedelta = timedelta(seconds=0)) -> bool:
@@ -1421,7 +1421,7 @@ def _low_contention_all_gather_meta(
     group_size = c10d._get_group_size_by_name(group_name)
     return tensor.new_empty(tensor.shape[0] * group_size, *tensor.shape[1:])
 
-
+@torch.library.impl(lib, "_low_contention_all_gather", "XPU")
 @torch.library.impl(lib, "_low_contention_all_gather", "CUDA")
 def _low_contention_all_gather(
     tensor: torch.Tensor,
@@ -1454,7 +1454,7 @@ def _low_contention_all_gather(
     output = tensor.new_empty(tensor.shape[0] * world_size, *tensor.shape[1:])
     chunks = output.chunk(world_size)
 
-    _get_backend_stream().wait_stream(torch.cuda.current_stream())
+    _get_backend_stream().wait_stream(torch.xpu.current_stream())
     with _get_backend_stream():
         if not input_is_symm_mem:
             local_buf = symm_mem.get_buffer(rank, tensor.shape, tensor.dtype)
@@ -1492,7 +1492,7 @@ def _low_contention_reduce_scatter_with_symm_mem_input(
     a2a_res = torch.empty_like(tensor)
     chunks = a2a_res.chunk(world_size)
 
-    _get_backend_stream().wait_stream(torch.cuda.current_stream())
+    _get_backend_stream().wait_stream(torch.xpu.current_stream())
     with _get_backend_stream():
         # pull + offline reduction
         symm_mem.barrier()
@@ -1529,7 +1529,7 @@ def _low_contention_reduce_scatter_with_workspace(
     assert tensor.shape[0] % world_size == 0
     chunks = tensor.chunk(world_size)
 
-    _get_backend_stream().wait_stream(torch.cuda.current_stream())
+    _get_backend_stream().wait_stream(torch.xpu.current_stream())
     with _get_backend_stream():
         # push + offline reduction
         workspace.barrier()
@@ -1552,7 +1552,7 @@ def _low_contention_reduce_scatter_with_workspace(
         torch._C._distributed_c10d._register_work(ret, Work())
         return ret
 
-
+@torch.library.impl(lib, "_low_contention_reduce_scatter", "XPU")
 @torch.library.impl(lib, "_low_contention_reduce_scatter", "CUDA")
 def _low_contention_reduce_scatter(
     tensor: torch.Tensor,
