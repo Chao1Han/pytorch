@@ -168,8 +168,8 @@ def _pipelined_multi_all_gather_and_consume(
     group_size = symm_mem.world_size
     rank = symm_mem.rank
 
-    # symm_mem.barrier(channel=0)
-    dist.barrier()
+    symm_mem.barrier(channel=0)
+    # dist.barrier()
     backend_stream = _get_backend_stream()
     backend_stream.wait_stream(torch.xpu.current_stream())
 
@@ -263,29 +263,29 @@ def _pipelined_multi_all_gather_and_consume(
     # remote shards.
     shard_consumer(shard, rank)
 
-    # for step in range(1, group_size):
-    #     if step % 2 == 0:
-    #         stream = torch.xpu.current_stream()
-    #     else:
-    #         stream = backend_stream
-    #     remote_rank = (step + rank) % group_size
-    #     remote_p2p_bufs = get_p2p_bufs(remote_rank)
-    #     with stream:
-    #         copy_shard(dst=shards[remote_rank], src=remote_p2p_bufs)
-    #         shard_consumer(shards[remote_rank], remote_rank)
-
-    stage_size = 2
-    for stage in range(1, group_size, stage_size):
-        stream = torch.xpu.current_stream() if (stage // stage_size) % 2 == 0 else backend_stream
+    for step in range(1, group_size):
+        if step % 2 == 0:
+            stream = torch.xpu.current_stream()
+        else:
+            stream = backend_stream
+        remote_rank = (step + rank) % group_size
+        remote_p2p_bufs = get_p2p_bufs(remote_rank)
         with stream:
-            for i in range(stage_size):
-                step = stage + i
-                if step >= group_size:
-                    break
-                remote_rank = (step + rank) % group_size
-                remote_p2p_bufs = get_p2p_bufs(remote_rank)
-                copy_shard(dst=shards[remote_rank], src=remote_p2p_bufs)
-                shard_consumer(shards[remote_rank], remote_rank)
+            copy_shard(dst=shards[remote_rank], src=remote_p2p_bufs)
+            shard_consumer(shards[remote_rank], remote_rank)
+
+    # stage_size = 2
+    # for stage in range(1, group_size, stage_size):
+    #     stream = torch.xpu.current_stream() if (stage // stage_size) % 2 == 0 else backend_stream
+    #     with stream:
+    #         for i in range(stage_size):
+    #             step = stage + i
+    #             if step >= group_size:
+    #                 break
+    #             remote_rank = (step + rank) % group_size
+    #             remote_p2p_bufs = get_p2p_bufs(remote_rank)
+    #             copy_shard(dst=shards[remote_rank], src=remote_p2p_bufs)
+    #             shard_consumer(shards[remote_rank], remote_rank)
 
     if ag_out_needed:
         # Copy from input to the all-gather output. Opportunistically overlap
@@ -1250,11 +1250,6 @@ def _fused_scaled_matmul_reduce_scatter_impl(
             .flatten(0, -2)
         )
         A_scale_shards = list(A_scale.chunk(group.size()))
-        # cuBLAS's row-wise kernel requires scales to be aligned to 16 bytes.
-        # When we slice them we might break this and need to reallocate them.
-        A_scale_shards = [
-            t if t.data_ptr() % 16 == 0 else t.clone() for t in A_scale_shards
-        ]
     else:
         raise ValueError("A_scale cannot be none for scaled_mm")
 
