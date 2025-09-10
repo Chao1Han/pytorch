@@ -68,6 +68,7 @@ class TORCH_API SymmetricMemory : public c10::intrusive_ptr_target {
   virtual void barrier(int channel, size_t timeout_ms) = 0;
   virtual void put_signal(int dst_rank, int channel, size_t timeout_ms) = 0;
   virtual void wait_signal(int src_rank, int channel, size_t timeout_ms) = 0;
+  virtual void copy_buffer(at::Tensor src, at::Tensor dst , size_t size) = 0;
 
   virtual int get_rank() = 0;
   virtual int get_world_size() = 0;
@@ -93,7 +94,7 @@ class SymmetricMemoryAllocator : public c10::intrusive_ptr_target {
   virtual void free(void* ptr) = 0;
   virtual size_t get_alloc_size(void* ptr) = 0;
   virtual c10::intrusive_ptr<SymmetricMemory> rendezvous(
-      const at::Tensor& tensor,
+      void* ptr,
       const std::optional<std::string>& group_name) = 0;
   virtual bool has_multicast_support(int device_idx) = 0;
   virtual c10::DeviceType supported_device_type() = 0;
