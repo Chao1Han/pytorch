@@ -629,7 +629,8 @@ def fuse_all_gather_matmul(all_gather: _AllGatherMatch) -> None:
     """
     if (
         not torch.distributed.is_available()
-        or not torch.distributed.is_nccl_available()
+        or not (torch.distributed.is_nccl_available()
+                or torch.distributed.is_xccl_available())
     ):
         return
 
@@ -875,7 +876,8 @@ def fuse_matmul_reduce_scatter(reduce_scatter: _ReduceScatterMatch) -> None:
     """
     if (
         not torch.distributed.is_available()
-        or not torch.distributed.is_nccl_available()
+        or not (torch.distributed.is_nccl_available()
+                or torch.distributed.is_xccl_available())
     ):
         return
 
