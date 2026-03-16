@@ -788,7 +788,7 @@ def _fused_all_gather_matmul_last_gather_dim_impl(
     ]
 
     first = True
-    events = [torch.cuda.Event() for _ in outputs]
+    events = [torch.Event() for _ in outputs]
 
     def default_consumer(shard: torch.Tensor, rank: int) -> None:
         nonlocal first
