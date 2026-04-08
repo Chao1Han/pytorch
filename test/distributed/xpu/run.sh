@@ -21,8 +21,9 @@ LLAMA_8B_M_1=(8192 8192)
 LLAMA_8B_N_1=(4096 4096)
 LLAMA_8B_K_1=(1024 3584)
 
+len1=${#LLAMA_8B_M_1[@]}
 
-for ((i=0; i<$len; i++)); do
+for ((i=0; i<$len1; i++)); do
     M=${LLAMA_8B_M_1[$i]}
     N=${LLAMA_8B_N_1[$i]}
     K=${LLAMA_8B_K_1[$i]}
