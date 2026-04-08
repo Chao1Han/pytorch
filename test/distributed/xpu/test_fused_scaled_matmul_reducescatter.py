@@ -55,8 +55,7 @@ symm_mem.enable_symm_mem_for_group(group_name)
 e4m3_type = torch.float8_e4m3fn
 
 def test_scaled_matmul_reducescatter(rank, world_size):
-    # Device is always 0 after ZE_AFFINITY_MASK filtering
-    torch.xpu.set_device(0)
+    torch.xpu.set_device(rank)
     torch.use_deterministic_algorithms(True, warn_only=True)
 
     group = dist.group.WORLD
@@ -150,22 +149,10 @@ def test_scaled_matmul_reducescatter(rank, world_size):
             print(prof.key_averages().table(sort_by="self_xpu_time_total"))
         prof.export_chrome_trace("./profile_kineto_trace_scaled_reduce_scatter_M" + str(M) + "_N" + str(N) + "_K" + str(K) + "_rank" + str(rank) + ".json")
 
-    import sys
-    import gc
-
-    # Cleanup tensors
-    del A, B, A_scale, B_scale, output_0, output_1
-    del begin_events_ref, end_events_ref, begin_events, end_events
-    del begin_events_mm_full, end_events_mm_full, begin_events_mm_shard, end_events_mm_shard
-    gc.collect()
-
     dist.destroy_process_group()
-    print(f"[Rank {rank}] Process group destroyed", flush=True)
-    sys.stdout.flush()
-    time.sleep(0.1)
+    print(f"[Fallback time in rank {rank}]: average time = {sum(latencies_ref) / len(latencies_ref)} detail lists = {latencies_ref} ms")
+    print(f"[Symm ops time in rank {rank}]: average time = {sum(latencies) / len(latencies)} detail lists =  {latencies} ms")
 
-    # Use os._exit() to avoid ISHMEM/PyTorch cleanup conflicts
-    os._exit(0)
 
 
 rank = dist.get_rank()
