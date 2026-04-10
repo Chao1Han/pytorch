@@ -6,7 +6,7 @@ LOG_DIR="perf_logs"
 mkdir -p "$LOG_DIR"
 
 # M values: 8192 down to 1024, step -1024
-M_VALUES=(8192 7168 6144 5120 4096 3072 2048 1024)
+M_VALUES=(8192 4096 2048 1024)
 
 # Allgather configs: N K
 AG_N=(1536 7168 2560 12800)
