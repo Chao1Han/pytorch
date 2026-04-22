@@ -13,6 +13,7 @@ from typing import Any, Literal
 from typing_extensions import deprecated
 
 import torch
+import torch.distributed as dist
 import torch.distributed._functional_collectives as funcol
 import torch.distributed.distributed_c10d as c10d
 from torch._C._autograd import DeviceType
