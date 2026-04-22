@@ -338,10 +338,8 @@ def _pipelined_produce_and_all2all(
         ]
         dist.all_to_all_single(output=output, input=torch.cat(chunks))
     """
-    out_chunks = output.chunk(
-        c10d._get_group_size_by_name(group_name), dim=out_chunk_dim
-    )
-    p2p_workspace_size_req = out_chunks[0].numel() * out_chunks[0].element_size() * 2
+    out_chunks = output.chunk(c10d._get_group_size_by_name(group_name))
+    p2p_workspace_size_req = out_chunks[0].numel() * out_chunks[0].element_size() * dist.get_world_size()
     symm_mem = get_symm_mem_workspace(group_name, min_size=p2p_workspace_size_req)
     group_size = symm_mem.world_size
     rank = symm_mem.rank
@@ -351,29 +349,21 @@ def _pipelined_produce_and_all2all(
     backend_stream.wait_stream(torch.accelerator.current_stream())
 
     def get_p2p_buf(rank: int, idx: int) -> torch.Tensor:
-        if idx not in (0, 1):
-            raise AssertionError
-        offset = 0 if idx == 0 else out_chunks[0].numel()
+        offset = out_chunks[0].numel() * idx
         return symm_mem.get_buffer(
             rank, out_chunks[0].shape, out_chunks[0].dtype, offset
         )
 
-    # Prepare two local p2p buffers, so that a remote rank can pull the result
-    # of step [i] in one p2p buffer while the local rank can compute the
-    # result of step [i+1] and write it directly the other p2p buffer.
-    local_p2p_buf_0 = get_p2p_buf(rank, 0)
-    local_p2p_buf_1 = get_p2p_buf(rank, 1)
-
     for step in range(1, group_size):
         remote_rank = (rank - step) % group_size
+        producer_rank = (rank + step) % group_size
+        p2p_buf = get_p2p_buf(rank, producer_rank)
+        remote_p2p_buf = get_p2p_buf(remote_rank, rank
+                                     )
         if step % 2 == 0:
-            stream = torch.accelerator.current_stream()
-            p2p_buf = local_p2p_buf_1
-            remote_p2p_buf = get_p2p_buf(remote_rank, 1)
+            stream = torch.xpu.current_stream()
         else:
             stream = backend_stream
-            p2p_buf = local_p2p_buf_0
-            remote_p2p_buf = get_p2p_buf(remote_rank, 0)
         with stream:
             # Parallelization strategy: every rank issues independent compute
             # -> barrier -> p2p copy sequences on two streams. In addition to
@@ -424,12 +414,12 @@ def _pipelined_produce_and_all2all(
             # order of subsequent kernels to be inconsistent across ranks.
             if step == 2 and torch.cuda.is_available():
                 torch.cuda._sleep(100)
-            chunk_producer((rank + step) % group_size, p2p_buf)
+            chunk_producer(producer_rank, p2p_buf)
             symm_mem.barrier(channel=step % 2)
             out_chunks[remote_rank].copy_(remote_p2p_buf)
             # The local P2P buffer can only be overwritten by the next
             # chunk_producer after all peers have finished reading from it.
-            symm_mem.barrier(channel=step % 2)
+            # symm_mem.barrier(channel=step % 2)
 
     # If the sleep wasn't issued in the above loop, do it now.
     if group_size == 2 and torch.cuda.is_available():
