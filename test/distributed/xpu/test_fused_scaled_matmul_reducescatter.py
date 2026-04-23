@@ -56,7 +56,8 @@ e4m3_type = torch.float8_e4m3fn
 
 def test_scaled_matmul_reducescatter(rank, world_size):
     torch.xpu.set_device(rank)
-    torch.use_deterministic_algorithms(True, warn_only=True)
+    # todo: only need for accuracy check, otherwise performance loss
+    # torch.use_deterministic_algorithms(True, warn_only=True)
 
     group = dist.group.WORLD
     scatter_dim = 0
