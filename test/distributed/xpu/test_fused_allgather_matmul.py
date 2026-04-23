@@ -44,7 +44,8 @@ dist.init_process_group(backend='xccl')
 
 def test_allgather_matmul(rank, world_size):
     torch.xpu.set_device(rank)
-    torch.use_deterministic_algorithms(True, warn_only=True)
+    # todo: only need for accuracy check, otherwise performance loss
+    # torch.use_deterministic_algorithms(True, warn_only=True)
 
     group = dist.group.WORLD
 
