@@ -1050,7 +1050,7 @@ class AllocateLine(MemoryPlanningLine):
         device = self.node.get_device()
         if not (device is not None and device.index is not None):
             raise AssertionError(
-                f"Comm buffer requires a valid CUDA device with index, got {device}"
+                f"Comm buffer requires a valid accelerator device with index, got {device}"
             )
         dtype = self.node.get_dtype()
         shape = tuple(self.node.get_size())
@@ -1067,7 +1067,7 @@ class AllocateLine(MemoryPlanningLine):
                 f"{self.wrapper.codegen_shape_tuple(shape)}, "
                 f"{self.wrapper.codegen_shape_tuple(stride)}, "
                 f"{dtype}, "
-                f'torch.device("cuda:{device.index}"), '
+                f'torch.device("{device.type}:{device.index}"), '
                 f'group_name="{group_name}", '
                 f"alloc_id={random.randint(0, 2**64 - 1)})"
             )
