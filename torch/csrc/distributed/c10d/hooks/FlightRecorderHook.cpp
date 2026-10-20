@@ -35,6 +35,8 @@ std::string_view hookOpName(HookOpName name) {
       return "broadcast";
     case HookOpName::ALLREDUCE:
       return "all_reduce";
+    case HookOpName::ALLREDUCE_OUT:
+      return "all_reduce_out";
     case HookOpName::ALLREDUCE_COALESCED:
       return "allreduce_coalesced";
     case HookOpName::REDUCE:
