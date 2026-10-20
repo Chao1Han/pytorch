@@ -42,6 +42,13 @@ class PyBackend : public Backend {
     WORK_OVERRIDE(Backend, allreduce_coalesced, tensors, opts);
   }
 
+  c10::intrusive_ptr<Work> all_reduce_out(
+      at::Tensor& outputBuffer,
+      at::Tensor& inputBuffer,
+      const AllreduceOptions& opts = AllreduceOptions()) override {
+    WORK_OVERRIDE(Backend, all_reduce_out, outputBuffer, inputBuffer, opts);
+  }
+
   c10::intrusive_ptr<Work> reduce(
       std::vector<at::Tensor>& tensors,
       const ReduceOptions& opts = ReduceOptions()) override {

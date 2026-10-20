@@ -4559,12 +4559,13 @@ c10::intrusive_ptr<Work> ProcessGroupNCCL::allreduce_sparse(
 }
 
 c10::intrusive_ptr<Work> ProcessGroupNCCL::allreduce_impl(
-    at::Tensor& tensor,
+    at::Tensor& inputTensor,
+    at::Tensor& outputTensor,
     const char* profilingTitle,
     const AllreduceOptions& opts) {
   return collective(
-      tensor,
-      tensor,
+      inputTensor,
+      outputTensor,
       [&](at::Tensor& input,
           at::Tensor& output,
           ncclComm_t comm,
@@ -4594,9 +4595,9 @@ c10::intrusive_ptr<Work> ProcessGroupNCCL::allreduce(
   if (tensor.is_complex()) {
     TORCH_CHECK(
         c10d::isComplexViewAsRealAllowed(opts.reduceOp),
-        "all_reduce does not support",
+        "all_reduce does not support ",
         opts.reduceOp,
-        "on complex tensors");
+        " on complex tensors");
     tensor = at::view_as_real(tensor);
   }
   check_gpu_single_tensor(tensor);
@@ -4637,7 +4638,63 @@ c10::intrusive_ptr<Work> ProcessGroupNCCL::allreduce(
       opts.asyncOp); // is asynchronized op
 
   // stashing note: collective() will stash tensors.
-  return allreduce_impl(tensor, "nccl:all_reduce", opts);
+  return allreduce_impl(tensor, tensor, "nccl:all_reduce", opts);
+}
+
+c10::intrusive_ptr<Work> ProcessGroupNCCL::all_reduce_out(
+    at::Tensor& outputTensor,
+    at::Tensor& inputTensor,
+    const AllreduceOptions& opts) {
+  if (inputTensor.scalar_type() != outputTensor.scalar_type()) {
+    C10_THROW_ERROR(
+        TypeError, "output tensor must have the same type as input tensor");
+  }
+  // Unlike _allgather_base and _reduce_scatter_base, which flatten, this
+  // preserves shape, so require the sizes to match rather than just the numel.
+  if (inputTensor.sizes() != outputTensor.sizes()) {
+    C10_THROW_ERROR(
+        ValueError, "output tensor must have the same shape as input tensor");
+  }
+
+  auto input = inputTensor;
+  auto output = outputTensor;
+  if (input.is_complex()) {
+    TORCH_CHECK(
+        c10d::isComplexViewAsRealAllowed(opts.reduceOp),
+        "all_reduce_out does not support ",
+        opts.reduceOp,
+        " on complex tensors");
+    input = at::view_as_real(input);
+    output = at::view_as_real(output);
+  }
+  check_gpu_single_tensor(input);
+  check_gpu_single_tensor(output);
+
+  TORCH_CHECK(
+      !isUnsupportedFloat8(input.scalar_type()),
+      "Unsupported Float8 type for NCCL reduction");
+
+  RECORD_PARAM_COMMS_DATA_WITH_ASYNC_OP(
+      std::make_tuple(
+          static_cast<int64_t>(seqCollective_) + 1,
+          false), // seq + 1 to match collective
+      std::make_tuple(pg_uid_, pg_desc_), // PG name tuple
+      input, // inputTensors
+      output, // outputTensors
+      rank_, // rank
+      "all_reduce_out", // collective name
+      input.numel(), // inNelems
+      output.numel(), // outNelems
+      output.scalar_type(), // dType
+      std::vector<int64_t>(), // inSplitSizes
+      std::vector<int64_t>(), // outSplitSizes
+      globalRankStart_, // globalRankStart_
+      globalRankStride_, // globalRankStride_
+      this->getSize(), // worldSize
+      opts.asyncOp); // is asynchronized op
+
+  // stashing note: collective() will stash inputs and outputs.
+  return allreduce_impl(input, output, "nccl:all_reduce_out", opts);
 }
 
 c10::intrusive_ptr<Work> ProcessGroupNCCL::allreduce_coalesced(
@@ -4796,9 +4853,9 @@ c10::intrusive_ptr<Work> ProcessGroupNCCL::reduce(
   if (tensor.is_complex()) {
     TORCH_CHECK(
         c10d::isComplexViewAsRealAllowed(opts.reduceOp),
-        "reduce does not support",
+        "reduce does not support ",
         opts.reduceOp,
-        "on complex tensors");
+        " on complex tensors");
     tensor = at::view_as_real(tensor);
   }
   check_gpu_single_tensor(tensor);
@@ -5361,7 +5418,8 @@ c10::intrusive_ptr<Work> ProcessGroupNCCL::barrier(const BarrierOptions& opts) {
   // All reduce to achieve the barrier
   AllreduceOptions arOpts = AllreduceOptions();
   arOpts.asyncOp = opts.asyncOp;
-  auto work = allreduce_impl(barrierTensor, "nccl:all_reduce_barrier", arOpts);
+  auto work = allreduce_impl(
+      barrierTensor, barrierTensor, "nccl:all_reduce_barrier", arOpts);
 
   if (opts.asyncOp) {
     // Work will take over barrierTensors

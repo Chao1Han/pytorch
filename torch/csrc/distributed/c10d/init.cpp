@@ -1351,6 +1351,7 @@ Example:
           "REDUCE_SCATTER_TENSOR_COALESCED",
           ::c10d::HookOpName::REDUCE_SCATTER_TENSOR_COALESCED)
       .value("ALLTOALL_BASE", ::c10d::HookOpName::ALLTOALL_BASE)
+      .value("ALLREDUCE_OUT", ::c10d::HookOpName::ALLREDUCE_OUT)
       .value("UNKNOWN", ::c10d::HookOpName::UNKNOWN);
 
   py::class_<::c10d::PreHookArgs>(module, "PreHookArgs")
@@ -2512,6 +2513,16 @@ Arguments:
               py::arg("opts") = ::c10d::AllgatherOptions(),
               py::call_guard<py::gil_scoped_release>())
           .def(
+              "all_reduce_out",
+              &::c10d::ProcessGroup::all_reduce_out,
+              py::arg("output"),
+              py::arg("input"),
+              py::arg("opts") = ::c10d::AllreduceOptions(),
+              py::call_guard<py::gil_scoped_release>(),
+              R"(Allreduces the input tensor into the output tensor, leaving the input untouched.
+
+              See :func:`torch.distributed.all_reduce_out` for more details.)")
+          .def(
               "allgather_coalesced",
               &::c10d::ProcessGroup::allgather_coalesced,
               py::arg("output_lists"),
@@ -3360,6 +3371,13 @@ Unsupported backends ignore this call. This API is experimental and subject to c
               py::arg("output"),
               py::arg("input"),
               py::arg("opts") = ::c10d::AllgatherOptions(),
+              py::call_guard<py::gil_scoped_release>())
+          .def(
+              "all_reduce_out",
+              &::c10d::Backend::all_reduce_out,
+              py::arg("output"),
+              py::arg("input"),
+              py::arg("opts") = ::c10d::AllreduceOptions(),
               py::call_guard<py::gil_scoped_release>())
           // Deprecated alias of all_gather_single, kept for backward
           // compatibility. Bound to all_gather_single to avoid referencing the

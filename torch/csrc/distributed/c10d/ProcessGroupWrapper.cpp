@@ -413,6 +413,18 @@ c10::intrusive_ptr<Work> ProcessGroupWrapper::allreduce_coalesced(
   return backend_->allreduce_coalesced(tensors, opts);
 }
 
+c10::intrusive_ptr<Work> ProcessGroupWrapper::all_reduce_out(
+    at::Tensor& outputBuffer,
+    at::Tensor& inputBuffer,
+    const AllreduceOptions& opts) {
+  // Checked as an ALLREDUCE: the two are the same operation on the wire, so a
+  // rank calling allreduce while another calls all_reduce_out is consistent
+  // rather than a mismatch that would hang.
+  std::vector<at::Tensor> inputTensors({inputBuffer});
+  runCollectiveChecks(OpType::ALLREDUCE, inputTensors);
+  return backend_->all_reduce_out(outputBuffer, inputBuffer, opts);
+}
+
 c10::intrusive_ptr<Work> ProcessGroupWrapper::allreduce_sparse(
     std::vector<at::Tensor>& tensors,
     const AllreduceOptions& opts) {

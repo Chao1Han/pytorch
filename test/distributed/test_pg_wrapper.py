@@ -710,6 +710,26 @@ class ProcessGroupGlooWrapperTest(AbstractProcessGroupWrapperTest):
         pg = self._create_wrapper_pg(with_new_group=True)
         self._test_allgather_into_tensor_coalesced_op_mismatch(pg)
 
+    @with_dist_debug_levels(levels=["DETAIL"])
+    def test_all_reduce_out_debug_mode(self):
+        """
+        Tests that ProcessGroupWrapper forwards all_reduce_out to the wrapped
+        backend. Without the forward it would inherit Backend's default
+        emulation, which copies and then reduces in place, losing the wrapped
+        backend's out-of-place implementation whenever debug mode is on.
+        """
+        pg = self._create_wrapper_pg(with_new_group=True)
+
+        input_tensor = torch.ones(2, 2) * (self.rank + 1)
+        input_before = input_tensor.clone()
+        output_tensor = torch.zeros(2, 2)
+
+        pg.all_reduce_out(output_tensor, input_tensor).wait()
+
+        expected = torch.ones(2, 2) * sum(range(1, self.world_size + 1))
+        self.assertEqual(expected, output_tensor)
+        self.assertEqual(input_before, input_tensor)
+
 
 if __name__ == "__main__":
     if torch.cuda.is_initialized() or torch.xpu.is_initialized():

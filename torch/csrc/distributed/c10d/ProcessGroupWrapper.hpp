@@ -40,6 +40,11 @@ class TORCH_API ProcessGroupWrapper : public Backend {
       const AllreduceCoalescedOptions& opts =
           AllreduceCoalescedOptions()) override;
 
+  c10::intrusive_ptr<Work> all_reduce_out(
+      at::Tensor& outputBuffer,
+      at::Tensor& inputBuffer,
+      const AllreduceOptions& opts = AllreduceOptions()) override;
+
   c10::intrusive_ptr<Work> reduce(
       std::vector<at::Tensor>& tensors,
       const ReduceOptions& opts = ReduceOptions()) override;

@@ -284,6 +284,46 @@ class TORCH_API ProcessGroup : public torch::CustomClassHolder {
     return work;
   }
 
+  // Reduces inputTensor across all ranks and writes the result into
+  // outputTensor, leaving inputTensor untouched. The _out suffix marks it as
+  // the out-of-place counterpart of allreduce.
+  virtual c10::intrusive_ptr<Work> all_reduce_out(
+      at::Tensor& outputTensor,
+      at::Tensor& inputTensor,
+      const AllreduceOptions& opts = AllreduceOptions()) {
+    // Process groups implemented in Python only override allreduce and have
+    // no backend to dispatch to, so emulate the op through it.
+    if (!hasBackendForDeviceType(inputTensor.device().type())) {
+      outputTensor.copy_(inputTensor);
+      std::vector<at::Tensor> tensors{outputTensor};
+      return allreduce(tensors, opts);
+    }
+
+    static auto op =
+        c10::Dispatcher::singleton()
+            .findSchemaOrThrow("c10d::all_reduce_out_", "")
+            .typed<std::tuple<at::Tensor, c10::intrusive_ptr<Work>>(
+                at::Tensor&,
+                at::Tensor&,
+                const c10::intrusive_ptr<::c10d::ProcessGroup>&,
+                const c10::intrusive_ptr<::c10d::ReduceOp>&,
+                bool,
+                int64_t)>();
+
+    auto work = std::get<1>(op.call(
+        outputTensor,
+        inputTensor,
+        c10::intrusive_ptr<ProcessGroup>::unsafe_reclaim_from_nonowning(this),
+        c10::make_intrusive<ReduceOp>(opts.reduceOp),
+        opts.asyncOp,
+        opts.timeout.count()));
+
+    if (c10d::allow_inflight_collective_as_graph_input()) {
+      c10d::register_work(outputTensor, work);
+    }
+    return work;
+  }
+
   virtual c10::intrusive_ptr<Work> allreduce_coalesced(
       std::vector<at::Tensor>& tensors,
       const AllreduceCoalescedOptions& opts = AllreduceCoalescedOptions()) {

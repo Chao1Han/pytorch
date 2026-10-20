@@ -895,6 +895,30 @@ class ProcessGroupNCCLGroupTest(MultiProcessTestCase):
 
     @requires_nccl()
     @skip_but_pass_in_sandcastle_if(not TEST_MULTIGPU, "NCCL test requires 2+ GPUs")
+    def test_all_reduce_out_complex(self):
+        # Exercises the view_as_real path in ProcessGroupNCCL::all_reduce_out,
+        # which the dist.all_reduce_out wrapper never reaches because it
+        # converts to real itself.
+        store = c10d.FileStore(self.file_name, self.world_size)
+        pg = self._create_process_group_nccl(store, self.opts())
+        device = self.rank_to_GPU[self.rank][0]
+
+        value = complex(self.rank + 1, self.rank + 1)
+        input_tensor = torch.full((10,), value, dtype=torch.cfloat, device=device)
+        input_before = input_tensor.clone()
+        output_tensor = torch.zeros(10, dtype=torch.cfloat, device=device)
+
+        pg.all_reduce_out(output_tensor, input_tensor).wait()
+
+        total = float(self.world_size * (self.world_size + 1) / 2)
+        self.assertEqual(
+            torch.full((10,), complex(total, total), dtype=torch.cfloat, device=device),
+            output_tensor,
+        )
+        self.assertEqual(input_before, input_tensor)
+
+    @requires_nccl()
+    @skip_but_pass_in_sandcastle_if(not TEST_MULTIGPU, "NCCL test requires 2+ GPUs")
     def test_destruct_before_terminate_pg(self):
         # Disable ASYNC_ERROR_HANDLING for this test to ensure we can programmatically
         # abort the process group.
@@ -5250,6 +5274,11 @@ class NcclProcessGroupWithDispatchedCollectivesTests(
     @skip_if_lt_x_gpu(1)
     def test_allreduce_coalesced(self):
         self._test_allreduce_coalesced(backend="nccl")
+
+    @requires_nccl()
+    @skip_if_lt_x_gpu(1)
+    def test_all_reduce_out(self):
+        self._test_all_reduce_out(backend="nccl")
 
     @requires_nccl()
     @skip_if_lt_x_gpu(1)

@@ -255,6 +255,18 @@ class PyProcessGroup : public ProcessGroup {
         opts);
   }
 
+  c10::intrusive_ptr<Work> all_reduce_out(
+      at::Tensor& outputTensor,
+      at::Tensor& inputTensor,
+      const AllreduceOptions& opts = AllreduceOptions()) override {
+    WORK_OVERRIDE(
+        ProcessGroup, /* Parent class */
+        all_reduce_out, /* Name of function in C++ */
+        outputTensor,
+        inputTensor,
+        opts);
+  }
+
   c10::intrusive_ptr<Work> reduce(
       std::vector<at::Tensor>& tensors,
       const ReduceOptions& opts = ReduceOptions()) override {

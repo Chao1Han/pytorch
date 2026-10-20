@@ -88,9 +88,18 @@ at::Tensor all_reduce(
         "all_reduce: reduce_op does not support complex tensors");
   }
   auto input_real = input.is_complex() ? at::view_as_real(input) : input;
-  auto output = input_real.clone(at::MemoryFormat::Contiguous);
-  auto output_ret = all_reduce_(output, std::move(reduce_op), std::move(group));
-  return input.is_complex() ? at::view_as_complex(output_ret) : output_ret;
+  // Reduce straight into a fresh buffer instead of cloning the input first:
+  // the communication libraries take distinct send/recv buffers anyway, so a
+  // backend that forwards both skips the copy entirely.
+  auto input_contig = input_real.contiguous();
+  auto output = at::empty_like(input_contig, at::MemoryFormat::Contiguous);
+
+  c10d::AllreduceOptions opts;
+  opts.reduceOp = *reduce_op;
+
+  auto work = group->all_reduce_out(output, input_contig, opts);
+  c10d::register_work(output, work);
+  return input.is_complex() ? at::view_as_complex(output) : output;
 }
 
 at::Tensor& all_reduce_(

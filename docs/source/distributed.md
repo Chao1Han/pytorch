@@ -642,6 +642,10 @@ if rank == 0:
 ```
 
 ```{eval-rst}
+.. autofunction:: all_reduce_out
+```
+
+```{eval-rst}
 .. autofunction:: all_reduce_coalesced
 ```
 
