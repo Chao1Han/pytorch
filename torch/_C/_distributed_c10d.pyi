@@ -578,6 +578,12 @@ class ProcessGroup:
         tensors: list[Tensor],
         opts=...,
     ) -> Work: ...
+    def all_reduce_single(
+        self,
+        output: Tensor,
+        input: Tensor,
+        opts: AllreduceOptions = ...,
+    ) -> Work: ...
     def reduce_scatter_single_coalesced(
         self,
         outputTensors: list[Tensor],

@@ -5253,6 +5253,11 @@ class NcclProcessGroupWithDispatchedCollectivesTests(
 
     @requires_nccl()
     @skip_if_lt_x_gpu(1)
+    def test_all_reduce_single(self):
+        self._test_all_reduce_single(backend="nccl")
+
+    @requires_nccl()
+    @skip_if_lt_x_gpu(1)
     def test_all_to_all_single(self):
         self._test_all_to_all_single(backend="nccl")
 

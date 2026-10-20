@@ -881,6 +881,11 @@ class TORCH_API ProcessGroupNCCL : public Backend {
       const AllreduceCoalescedOptions& opts =
           AllreduceCoalescedOptions()) override;
 
+  c10::intrusive_ptr<Work> all_reduce_single(
+      at::Tensor& outputTensor,
+      at::Tensor& inputTensor,
+      const AllreduceOptions& opts = AllreduceOptions()) override;
+
   c10::intrusive_ptr<Work> reduce(
       std::vector<at::Tensor>& tensors,
       const ReduceOptions& opts = ReduceOptions()) override;
@@ -1221,7 +1226,8 @@ class TORCH_API ProcessGroupNCCL : public Backend {
       const char* profilingTitle);
 
   c10::intrusive_ptr<Work> allreduce_impl(
-      at::Tensor& tensor,
+      at::Tensor& inputTensor,
+      at::Tensor& outputTensor,
       const char* profilingTitle = "nccl:all_reduce",
       const AllreduceOptions& opts = AllreduceOptions());
 

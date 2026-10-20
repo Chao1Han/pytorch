@@ -3170,6 +3170,37 @@ dist.init_process_group(rank=0, world_size=1, store=dist.HashStore())
         for tensor in tensors:
             self.assertEqual(tensor, torch.ones(10, 10) * self.world_size)
 
+    def _test_all_reduce_single(self, backend):
+        store = dist.FileStore(self.file_name, self.world_size)
+        dist.init_process_group(
+            backend,
+            world_size=self.world_size,
+            rank=self.rank,
+            store=store,
+        )
+        # TODO: this will be updated in the future to not be backend specific
+        device = "cuda" if backend == "nccl" else "xpu" if backend == "xccl" else "cpu"
+        device = torch.device(device)
+        input_tensor = torch.ones(10, 10, device=device)
+        output_tensor = torch.zeros(10, 10, device=device)
+        dist.all_reduce_single(output_tensor, input_tensor, dist.ReduceOp.SUM)
+        self.assertEqual(output_tensor, torch.ones(10, 10) * self.world_size)
+        # The input buffer must be left untouched.
+        self.assertEqual(input_tensor, torch.ones(10, 10))
+
+        # The async flavor returns a Work that can be waited on.
+        output_tensor.zero_()
+        work = dist.all_reduce_single(
+            output_tensor, input_tensor, dist.ReduceOp.SUM, async_op=True
+        )
+        work.wait()
+        self.assertEqual(output_tensor, torch.ones(10, 10) * self.world_size)
+        self.assertEqual(input_tensor, torch.ones(10, 10))
+
+        # Mismatched shapes are rejected.
+        with self.assertRaises((RuntimeError, ValueError)):
+            dist.all_reduce_single(torch.zeros(10, 11, device=device), input_tensor)
+
     def _test_all_to_all_single(self, backend):
         store = dist.FileStore(self.file_name, self.world_size)
         dist.init_process_group(

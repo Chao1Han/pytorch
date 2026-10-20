@@ -622,6 +622,54 @@ class ProcessGroupGlooTest(MultiProcessTestCase):
     def test_allreduce_basics_cuda(self):
         self._test_allreduce_basics(lambda t: t.clone().cuda())
 
+    def _test_all_reduce_single_basics(self, fn):
+        store = c10d.FileStore(self.file_name, self.world_size)
+        pg = self._create_process_group_gloo(
+            store, self.rank, self.world_size, self.opts()
+        )
+
+        tests = simple_reduce_tests(self.rank, self.world_size)
+        for op, input, expected in tests:
+            with self.subTest(op=op):
+                opts = c10d.AllreduceOptions()
+                opts.reduceOp = op
+                input_tensor = fn(input)
+                # Keep a pristine copy around to assert the input is untouched.
+                input_before = input_tensor.clone()
+                output_tensor = torch.empty_like(input_tensor)
+                fut = pg.all_reduce_single(
+                    output_tensor, input_tensor, opts
+                ).get_future()
+                fut.wait()
+                self.assertEqual(expected, output_tensor)
+                self.assertEqual(input_before, input_tensor)
+
+    @requires_gloo()
+    def test_all_reduce_single_basics(self):
+        self._test_all_reduce_single_basics(lambda t: t.clone())
+
+    @skip_if_lt_x_gpu(2)
+    @requires_gloo()
+    def test_all_reduce_single_basics_cuda(self):
+        self._test_all_reduce_single_basics(lambda t: t.clone().cuda())
+
+    @requires_gloo()
+    def test_all_reduce_single_checks(self):
+        store = c10d.FileStore(self.file_name, self.world_size)
+        pg = self._create_process_group_gloo(
+            store, self.rank, self.world_size, self.opts()
+        )
+
+        input_tensor = torch.zeros([2], dtype=torch.float32)
+        with self.assertRaisesRegex(RuntimeError, "shape and dtype"):
+            pg.all_reduce_single(
+                torch.zeros([3], dtype=torch.float32), input_tensor
+            ).wait()
+        with self.assertRaisesRegex(RuntimeError, "shape and dtype"):
+            pg.all_reduce_single(
+                torch.zeros([2], dtype=torch.float64), input_tensor
+            ).wait()
+
     def _test_allreduce_stress(self, inputs):
         store = c10d.FileStore(self.file_name, self.world_size)
         pg = self._create_process_group_gloo(
@@ -3562,6 +3610,10 @@ class GlooProcessGroupWithDispatchedCollectivesTests(
     @requires_gloo()
     def test_allreduce_coalesced(self):
         self._test_allreduce_coalesced(backend="gloo")
+
+    @requires_gloo()
+    def test_all_reduce_single(self):
+        self._test_all_reduce_single(backend="gloo")
 
     @requires_gloo()
     def test_all_to_all_single(self):

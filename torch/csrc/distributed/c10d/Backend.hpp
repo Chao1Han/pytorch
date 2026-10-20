@@ -399,6 +399,37 @@ class TORCH_API Backend : public torch::CustomClassHolder {
             " does not support allreduce_coalesced"));
   }
 
+  // Reduces inputBuffer across all ranks and writes the result into
+  // outputBuffer, leaving inputBuffer untouched. Named after the torchcomms
+  // backend naming scheme.
+  //
+  // The underlying communication libraries take separate send and receive
+  // buffers (ncclAllReduce, ccl::allreduce, MPI_Allreduce), so a backend that
+  // forwards both buffers gets this for free; the default below emulates it so
+  // that every backend has a working implementation from the start.
+  virtual c10::intrusive_ptr<Work> all_reduce_single(
+      at::Tensor& outputBuffer,
+      at::Tensor& inputBuffer,
+      const AllreduceOptions& opts = AllreduceOptions()) {
+    TORCH_CHECK(
+        outputBuffer.sizes() == inputBuffer.sizes() &&
+            outputBuffer.scalar_type() == inputBuffer.scalar_type(),
+        c10::str(
+            "all_reduce_single: output tensor must match the input tensor in "
+            "shape and dtype, but got output ",
+            outputBuffer.sizes(),
+            " (",
+            outputBuffer.scalar_type(),
+            ") vs input ",
+            inputBuffer.sizes(),
+            " (",
+            inputBuffer.scalar_type(),
+            ")"));
+    outputBuffer.copy_(inputBuffer);
+    std::vector<at::Tensor> tensors{outputBuffer};
+    return allreduce(tensors, opts);
+  }
+
   virtual c10::intrusive_ptr<Work> reduce(
       std::vector<at::Tensor>& /* tensors */,
       const ReduceOptions& /* opts */ = ReduceOptions()) {

@@ -214,6 +214,7 @@ COLLECTIVES = {
     "all_gather_single",
     "all_gather_v",
     "all_reduce",
+    "all_reduce_single",
     "_all_gather_base",
     "all_gather_into_tensor_coalesced",
     "reduce_scatter",
@@ -648,7 +649,7 @@ class Op:
                     f"'{other.output_sizes}'",
                 )
             if (
-                self.type in ["all_reduce", "allreduce_coalesced"]
+                self.type in ["all_reduce", "all_reduce_single", "allreduce_coalesced"]
                 and self.input_sizes != other.output_sizes
             ):
                 return MatchInfo(

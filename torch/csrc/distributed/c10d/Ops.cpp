@@ -26,6 +26,8 @@ TORCH_LIBRARY(c10d, m) {
   m.def(
       "allreduce_coalesced_(Tensor[] tensors, __torch__.torch.classes.c10d.ProcessGroup process_group, __torch__.torch.classes.c10d.ReduceOp reduce_op, bool async_op=True, int timeout=-1) -> __torch__.torch.classes.c10d.Work");
   m.def(
+      "all_reduce_single_(Tensor output_tensor, Tensor input_tensor, __torch__.torch.classes.c10d.ProcessGroup process_group, __torch__.torch.classes.c10d.ReduceOp reduce_op, bool async_op=True, int timeout=-1) -> (Tensor, __torch__.torch.classes.c10d.Work)");
+  m.def(
       "allgather_(Tensor[][] output_tensors, Tensor[] input_tensors, __torch__.torch.classes.c10d.ProcessGroup process_group, bool async_op=True, int timeout=-1) -> (Tensor[][], __torch__.torch.classes.c10d.Work)");
   m.def(
       "_allgather_base_(Tensor output_tensor, Tensor input_tensor, __torch__.torch.classes.c10d.ProcessGroup process_group, bool async_op=True, int timeout=-1) -> (Tensor, __torch__.torch.classes.c10d.Work)");
@@ -260,6 +262,37 @@ IMPL_ALLREDUCE(PrivateUse1)
 IMPL_ALLREDUCE_COALESCED(CPU)
 IMPL_ALLREDUCE_COALESCED(CUDA)
 IMPL_ALLREDUCE_COALESCED(PrivateUse1)
+
+// Unlike allreduce_ above, this takes distinct send and receive buffers and
+// leaves the input untouched, matching what ncclAllReduce/ccl::allreduce
+// already expose.
+//
+// This one is registered once under CompositeExplicitAutograd instead of per
+// device: backends that register their own c10d kernels out of tree (XPU, and
+// accelerators living outside this repo) would otherwise have no kernel at all
+// for it. They only need to override Backend::all_reduce_single to opt into
+// the zero-copy path.
+std::tuple<at::Tensor, c10::intrusive_ptr<Work>> all_reduce_single_(
+    at::Tensor& output_tensor,
+    at::Tensor& input_tensor,
+    const c10::intrusive_ptr<ProcessGroup>& process_group,
+    const c10::intrusive_ptr<ReduceOp>& reduce_op,
+    bool asyncOp,
+    int64_t timeout) {
+  auto hook_op_id = process_group->firePreHook(
+      HookOpName::ALLREDUCE_SINGLE, asyncOp, -1, input_tensor, output_tensor);
+  auto work = process_group->getBackend(input_tensor.device().type())
+                  ->all_reduce_single(
+                      output_tensor,
+                      input_tensor,
+                      AllreduceOptions{
+                          *reduce_op.get(),
+                          std::chrono::milliseconds(timeout),
+                          asyncOp});
+  process_group->firePostHook(
+      HookOpName::ALLREDUCE_SINGLE, asyncOp, hook_op_id, work);
+  return std::tuple<at::Tensor, c10::intrusive_ptr<Work>>(output_tensor, work);
+}
 
 // Copy output tensors (not storage) so that this can be used in a functional
 // manner
@@ -747,6 +780,10 @@ REGISTER_C10D_OP(alltoall_base_)
 REGISTER_C10D_OP(barrier)
 
 // The following ops are specialized, register them separately
+
+TORCH_LIBRARY_IMPL(c10d, CompositeExplicitAutograd, m) {
+  m.impl("all_reduce_single_", all_reduce_single_);
+}
 
 TORCH_LIBRARY_IMPL(c10d, CPU, m) {
   m.impl("monitored_barrier_", monitored_barrier_CPU);

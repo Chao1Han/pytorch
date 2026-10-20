@@ -110,6 +110,7 @@ __all__ = [
     "all_gather_object",
     "all_reduce",
     "all_reduce_coalesced",
+    "all_reduce_single",
     "all_to_all",
     "all_to_all_single",
     "barrier",
@@ -4063,6 +4064,113 @@ def all_reduce(
             return None
 
     work = group.allreduce([tensor], opts)
+
+    if async_op:
+        return work
+    elif (
+        work is not None
+    ):  # Backward compatible with backends that don't sync at CPP level
+        work.wait()
+    # Otherwise, the backend has sync'ed at CPP level
+    return None
+
+
+@_exception_logger
+def all_reduce_single(
+    output_tensor: torch.Tensor,
+    input_tensor: torch.Tensor,
+    op: _ReduceOp = ReduceOp.SUM,
+    group: ProcessGroup | None = None,
+    async_op: bool = False,
+) -> Work | None:
+    """
+    Reduce the input tensor across all machines and write the result to the output tensor.
+
+    Unlike :func:`all_reduce`, which reduces in place, this leaves
+    ``input_tensor`` untouched. The underlying communication libraries already
+    take distinct send and receive buffers, so a backend that forwards both
+    performs no extra copy; backends that do not override it fall back to a
+    copy followed by an in-place reduction.
+
+    After the call ``output_tensor`` is going to be bitwise identical in all
+    processes.
+
+    Complex tensors are supported.
+
+    Args:
+        output_tensor (Tensor): Output of the collective. Must have the same
+            shape and dtype as ``input_tensor``.
+        input_tensor (Tensor): Input of the collective. Left unmodified.
+        op (optional): One of the values from
+            ``torch.distributed.ReduceOp``
+            enum.  Specifies an operation used for element-wise reductions.
+        group (ProcessGroup, optional): The process group to work on. If None,
+            the default process group will be used.
+        async_op (bool, optional): Whether this op should be an async op
+
+    Returns:
+        Async work handle, if async_op is set to True.
+        None, if not async_op or if not part of the group
+
+    Examples:
+        >>> # xdoctest: +SKIP("no rank")
+        >>> # All tensors below are of torch.int64 type.
+        >>> # We have 2 process groups, 2 ranks.
+        >>> device = torch.device(f"cuda:{rank}")
+        >>> tensor_in = torch.arange(2, dtype=torch.int64, device=device) + 1 + 2 * rank
+        >>> tensor_in
+        tensor([1, 2], device='cuda:0') # Rank 0
+        tensor([3, 4], device='cuda:1') # Rank 1
+        >>> tensor_out = torch.empty_like(tensor_in)
+        >>> dist.all_reduce_single(tensor_out, tensor_in, op=ReduceOp.SUM)
+        >>> tensor_out
+        tensor([4, 6], device='cuda:0') # Rank 0
+        tensor([4, 6], device='cuda:1') # Rank 1
+        >>> tensor_in  # left untouched
+        tensor([1, 2], device='cuda:0') # Rank 0
+        tensor([3, 4], device='cuda:1') # Rank 1
+
+    """
+    relevant_args = (output_tensor, input_tensor)
+    if has_torch_function(relevant_args):
+        return handle_torch_function(
+            all_reduce_single,
+            relevant_args,
+            output_tensor,
+            input_tensor,
+            op=op,
+            group=group,
+            async_op=async_op,
+        )
+
+    _check_single_tensor(output_tensor, "output_tensor")
+    _check_single_tensor(input_tensor, "input_tensor")
+    if _rank_not_in_group(group):
+        _warn_not_in_group("all_reduce_single")
+        return None
+
+    if input_tensor.is_complex() or output_tensor.is_complex():
+        if input_tensor.is_complex() != output_tensor.is_complex():
+            raise ValueError(
+                "all_reduce_single requires input_tensor and output_tensor to "
+                "either both be complex or both be real"
+            )
+        if not supports_complex(op):
+            raise ValueError(
+                f"all_reduce_single does not support {op} on complex tensors"
+            )
+        input_tensor = torch.view_as_real(input_tensor)
+        output_tensor = torch.view_as_real(output_tensor)
+
+    opts = AllreduceOptions()
+    opts.reduceOp = op
+    opts.asyncOp = async_op
+    if group is None:
+        group = _get_default_group()
+
+    work = group.all_reduce_single(  # pyrefly: ignore[missing-attribute]
+        output_tensor, input_tensor, opts
+    )
 
     if async_op:
         return work
